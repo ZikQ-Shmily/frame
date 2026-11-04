@@ -28,7 +28,7 @@ def _shiying_resources(params):
         def joined(value):
             return ', '.join(map(str, value))[:500] if isinstance(value, list) else str(value or '')[:500]
         rows.append(dict(slug=slug, title=str(raw.get('title') or '')[:500],
-            remark=str(raw.get('remark') or '')[:2000], uploader=str((raw.get('user') or {}).get('nickname') or '')[:200],
+            remark=str(raw.get('remark') or '')[:2000], uploader=str((raw.get('user') or {}).get('nickname') or '').strip()[:200],
             resolution=joined(raw.get('video_resolution')), source=joined(raw.get('source')),
             size=str(raw.get('share_size') or '')[:100], unlock_points=points,
             is_unlocked=raw.get('is_unlocked') is True, media_type=media_type, tmdb_id=int(tmdb_id),
