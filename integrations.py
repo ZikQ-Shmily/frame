@@ -53,7 +53,8 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def fetch(url, headers=None, binary=False, maximum=6 * 1024 * 1024, body=None, timeout=12, error_messages=None):
+def fetch(url, headers=None, binary=False, maximum=6 * 1024 * 1024, body=None, timeout=12, error_messages=None,
+          rejected_messages=None):
     """No redirects: an Emby token must never follow a redirect to another host."""
     try:
         request_headers = {'User-Agent': 'Shiying/3.0', 'Accept': 'application/json', **(headers or {})}
@@ -85,6 +86,16 @@ def fetch(url, headers=None, binary=False, maximum=6 * 1024 * 1024, body=None, t
             message = '连接发生重定向，请填写服务最终地址（包含实际路径）'
         else:
             message = messages.get(error.code, '远端服务暂时不可用（HTTP %s）' % error.code)
+        # Only return explicitly approved validation messages, never arbitrary upstream text.
+        if error.code == 400 and rejected_messages:
+            try:
+                raw = error.read(8193)
+                detail = json.loads(raw) if len(raw) <= 8192 else None
+                upstream = detail.get('message') if isinstance(detail, dict) else None
+                if isinstance(upstream, str) and upstream in rejected_messages:
+                    message = rejected_messages[upstream]
+            except (ValueError, UnicodeError, OSError, HTTPException):
+                pass
         status = error.code
         error.close()
         if status in (401, 403) or (status == 400 and urlsplit(url).path.endswith('/Users/AuthenticateByName')):

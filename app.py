@@ -22,7 +22,7 @@ from flask import Flask, jsonify, request, send_from_directory, session, Respons
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from integrations import (TMDBClient, EmbyClient, EmbyUserClient, EmbyAuthError, IntegrationError, fetch,
                           valid_emby_url, poster_path, safe_date)
-from cms_client import CMSClient, CMSExecutor, canonical_re0_post_url
+from cms_client import CMSClient, CMSExecutor, CMSRequestRejected, canonical_re0_post_url
 from share_scanner import read_share_episodes
 from email_notifications import (DEFAULTS as MAIL_DEFAULTS, MailError,
     validate_config as validate_mail_config, require_ready as require_mail_ready, send_notification)
@@ -213,6 +213,8 @@ def headers(response):
 
 @app.errorhandler(Exception)
 def error_handler(error):
+    if isinstance(error, CMSRequestRejected):
+        return fail(str(error), 409)
     if isinstance(error, (IntegrationError, MailError)):
         return fail(str(error), 502)
     if isinstance(error, HTTPException):
