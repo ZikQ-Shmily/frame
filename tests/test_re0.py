@@ -115,6 +115,14 @@ class RE0Tests(IntegrationTests):
         with patch.object(client,'call',return_value=dict(success=True,data=self.row())):
             self.assertEqual(client.resolve(item,'same-source','发布者甲')['code'], 'xyz')
 
+    def test_client_normalizes_uploader_from_older_bridge(self):
+        client = CMSClient('http://cms.example:9526', 'token')
+        item = self.record()
+        row = self.row(uploader='　发布者甲 ')
+        self.assertEqual(client.clean(row, item['tmdb'])['uploader'], '发布者甲')
+        with patch.object(client, 'call', return_value=dict(success=True, data=row)):
+            self.assertEqual(client.resolve(item, 'same-source', '发布者甲')['uploader'], '发布者甲')
+
     def test_explicit_unlock_limit_and_invalid_inputs(self):
         item=self.record()
         cms=Mock(); cms.resolve.return_value=self.row(is_unlocked=True,unlock_points=10)
@@ -201,6 +209,18 @@ class BridgeTests(unittest.TestCase):
         self.client.search.assert_called_with('tv','123')
         self.raw.update(unlock_points=10,is_unlocked=True)
         self.assertTrue(self.ns['_shiying_operation']('/api/shiying/resolve',self.params)['success'])
+
+    def test_uploader_whitespace_is_normalized_for_search_and_resolve(self):
+        self.raw['user']['nickname'] = '　甲 '
+        search = self.ns['_shiying_operation']('/api/shiying/search', self.params)
+        self.assertEqual(search['data'][0]['uploader'], '甲')
+        resolved = self.ns['_shiying_operation']('/api/shiying/resolve', self.params)
+        self.assertEqual(resolved['data']['uploader'], '甲')
+        self.raw['user']['nickname'] = '　乙 '
+        self.client.unlock.reset_mock()
+        with self.assertRaises(ValueError):
+            self.ns['_shiying_operation']('/api/shiying/resolve', self.params)
+        self.client.unlock.assert_not_called()
 
     def test_explicit_paid_unlock_and_price_changes(self):
         self.raw.update(unlock_points=10)
