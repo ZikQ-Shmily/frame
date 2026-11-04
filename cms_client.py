@@ -70,6 +70,7 @@ class CMSClient:
             raise IntegrationError('RE0 资源与当前作品不匹配')
         result = {key: str(row.get(key) or '')[:limit] for key, limit in dict(slug=200, uploader=200, title=500,
                   remark=2000, resolution=500, source=500, size=100, resource_url=2000).items()}
+        result['uploader'] = result['uploader'].strip()
         parsed = urlsplit(result['resource_url'])
         if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
             raise IntegrationError('RE0 原帖地址无效')
