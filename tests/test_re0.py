@@ -141,7 +141,26 @@ class RE0Tests(IntegrationTests):
             client.resolve(item,'same-source','发布者甲')
             self.assertNotIn('max_points',call.call_args.args[1])
         self.assertTrue(client.clean(self.row(unlock_points=10),item['tmdb'])['can_unlock'])
-        self.assertFalse(client.clean(self.row(unlock_points=None),item['tmdb'])['can_unlock'])
+        self.assertTrue(client.clean(self.row(unlock_points=None),item['tmdb'])['can_unlock'])
+
+    def test_unknown_price_requires_explicit_manual_permission(self):
+        item = self.record()
+        cms = Mock(); cms.resolve.return_value = self.row(is_unlocked=True, unlock_points=None)
+        with patch.object(self.mod, 'cms_client', return_value=cms):
+            response = self.client.post('/api/items/' + item['id'] + '/re0',
+                json=dict(slug='same-source', uploader='发布者甲', allow_unknown_price='true'), headers=self.headers)
+            self.assertEqual(response.status_code, 400)
+            cms.resolve.assert_not_called()
+            response = self.client.post('/api/items/' + item['id'] + '/re0',
+                json=dict(slug='same-source', uploader='发布者甲', allow_unknown_price=True), headers=self.headers)
+            self.assertEqual(response.status_code, 200, response.json)
+            self.assertEqual(cms.resolve.call_args.kwargs, dict(allow_unknown_price=True))
+        client = CMSClient('http://cms.example:9526', 'token')
+        with patch.object(client, 'call', return_value=dict(success=True, data=self.row(is_unlocked=True, unlock_points=None))) as call:
+            client.resolve(item, 'same-source', '发布者甲', allow_unknown_price=True)
+            self.assertIs(call.call_args.args[1]['allow_unknown_price'], True)
+            client.resolve(item, 'same-source', '发布者甲')
+            self.assertNotIn('allow_unknown_price', call.call_args.args[1])
 
     def test_config_secret_and_role_boundary(self):
         response=self.client.put('/api/integrations', json=dict(cms_url='http://cms.example:9526', cms_token='CMS-PRIVATE-TOKEN'),headers=self.headers)
@@ -238,6 +257,22 @@ class BridgeTests(unittest.TestCase):
         self.raw.update(is_unlocked=False,unlock_points=None)
         with self.assertRaises(ValueError):
             self.ns['_shiying_operation']('/api/shiying/resolve',dict(self.params,max_points=10))
+
+    def test_unknown_price_only_manual_permission_can_unlock(self):
+        self.raw['unlock_points'] = None
+        for option in ({}, {'allow_unknown_price': False}, {'allow_unknown_price': 'true'}):
+            with self.subTest(option=option), self.assertRaises(ValueError):
+                self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, **option))
+        self.client.unlock.assert_not_called()
+        result = self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, allow_unknown_price=True))
+        self.assertIsNone(result['data']['unlock_points'])
+        self.client.unlock.assert_called_once_with('slug')
+        # A formerly unknown price that has become paid still requires the normal limit.
+        self.client.unlock.reset_mock()
+        self.raw['unlock_points'] = 10
+        with self.assertRaises(ValueError):
+            self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, allow_unknown_price=True))
+        self.client.unlock.assert_not_called()
 
     def test_auth_and_method_reject_before_external_access(self):
         for method,header,status in [('POST',b'Bearer bad',401),('GET',b'Bearer '+b'a'*64,405)]:

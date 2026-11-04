@@ -46,10 +46,16 @@ async function openRe0Picker(id) {
     renderRe0Results();
   } catch (error) { if (generation === re0Picker.generation && $('#re0-picker-content')) $('#re0-picker-content').innerHTML = `<div class="note-block">${esc(error.message)}。请在设置中测试 CMS 与 RE0 授权。</div>`; }
 }
+function re0PriceUnknown(row) {
+  return !!row?.uploader && !row.is_unlocked && row.unlock_points == null;
+}
+function re0BindLabel(row) {
+  return row?.can_bind ? '绑定并立即入库' : re0PriceUnknown(row) ? '解锁并立即入库 · 默认免费' : row?.can_unlock ? `解锁并立即入库 · ${row.unlock_points} 积分` : '缺少发布者';
+}
 function renderRe0Results(query = '') {
   const root = $('#re0-results'); if (!root) return;
   const filtered = re0Picker.rows.map((row, index) => ({ row, index })).filter(({ row }) => [row.title, row.uploader, row.resolution, row.source, row.remark].join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  root.innerHTML = filtered.length ? filtered.map(({ row, index }) => `<article class="re0-candidate"><div class="re0-candidate-top"><strong>${esc(row.uploader || '发布者未知')}</strong><span class="status ${row.can_bind ? 'status-updating' : 'status-unverified'}">${row.is_unlocked ? '已解锁' : row.unlock_points === 0 ? '免费' : row.unlock_points == null ? '价格待核对' : `${esc(row.unlock_points)} 积分`}</span></div><h3>${esc(row.title)}</h3><p>${esc([row.resolution, row.source, row.size].filter(Boolean).join(' · '))}</p>${row.remark ? `<p class="re0-remark">${esc(row.remark)}</p>` : ''}<div class="re0-candidate-actions"><a class="text-link" href="${esc(row.resource_url)}" target="_blank" rel="noopener noreferrer">查看 RE0 原帖 ${icon('external')}</a><button class="button primary small" data-re0="bind" data-index="${index}"${row.can_bind || row.can_unlock ? '' : ' disabled'}>${row.can_bind ? '绑定并立即入库' : row.can_unlock ? `解锁并立即入库 · ${esc(row.unlock_points)} 积分` : !row.uploader ? '缺少发布者' : '价格待核对'}</button></div></article>`).join('') : emptyState('没有找到符合条件的来源', '可以调整筛选，或稍后等待 RE0 发布资源。');
+  root.innerHTML = filtered.length ? filtered.map(({ row, index }) => `<article class="re0-candidate"><div class="re0-candidate-top"><strong>${esc(row.uploader || '发布者未知')}</strong><span class="status ${row.can_bind ? 'status-updating' : 'status-unverified'}">${row.is_unlocked ? '已解锁' : row.unlock_points === 0 ? '免费' : row.unlock_points == null ? '默认免费（价格未返回）' : `${esc(row.unlock_points)} 积分`}</span></div><h3>${esc(row.title)}</h3><p>${esc([row.resolution, row.source, row.size].filter(Boolean).join(' · '))}</p>${row.remark ? `<p class="re0-remark">${esc(row.remark)}</p>` : ''}${re0PriceUnknown(row) ? '<p class="form-hint">RE0 未返回价格，默认按免费处理；实际解锁可能扣积分。</p>' : ''}<div class="re0-candidate-actions"><a class="text-link" href="${esc(row.resource_url)}" target="_blank" rel="noopener noreferrer">查看 RE0 原帖 ${icon('external')}</a><button class="button primary small" data-re0="bind" data-index="${index}"${row.can_bind || row.can_unlock || re0PriceUnknown(row) ? '' : ' disabled'}>${esc(re0BindLabel(row))}</button></div></article>`).join('') : emptyState('没有找到符合条件的来源', '可以调整筛选，或稍后等待 RE0 发布资源。');
 }
 document.addEventListener('input', event => { if (event.target.id === 're0-filter') renderRe0Results(event.target.value); });
 document.addEventListener('click', async event => {
@@ -60,9 +66,9 @@ document.addEventListener('click', async event => {
     button.disabled = true;
     if (action === 'bind') {
       const id = re0Picker.itemId, row = re0Picker.rows[Number(button.dataset.index)];
-      if (!row || (!row.can_bind && !row.can_unlock)) return;
+      if (!row || (!row.can_bind && !row.can_unlock && !re0PriceUnknown(row))) return;
       button.textContent = row.can_bind ? '正在绑定…' : '正在解锁…';
-      const result = await api(`/api/items/${encodeURIComponent(id)}/re0`, { method: 'POST', body: { slug: row.slug, uploader: row.uploader, ...(!row.can_bind && row.can_unlock ? { max_points: row.unlock_points } : {}) } });
+      const result = await api(`/api/items/${encodeURIComponent(id)}/re0`, { method: 'POST', body: { slug: row.slug, uploader: row.uploader, ...(!row.can_bind && row.can_unlock && !re0PriceUnknown(row) ? { max_points: row.unlock_points } : {}), ...(re0PriceUnknown(row) ? { allow_unknown_price: true } : {}) } });
       await refreshIntegrationStatus(false); await loadItems(); renderPage(); openDetail(id); scheduleIntegrationPoll(); toast(result.item?.cms_delivery?.error ? '来源已绑定，CMS 下发失败，可在详情重试。' : '已绑定固定来源，后台自动识别集数，并请求 CMS 立即执行一次；实际入库以 Emby 为准。', !!result.item?.cms_delivery?.error);
     } else if (action === 'run' || action === 'run-status') {
       const id = button.dataset.id;
@@ -80,7 +86,7 @@ document.addEventListener('click', async event => {
       await loadItems(); renderPage(); openDetail(id); toast(result.item?.cms_delivery?.error ? '来源已解绑，CMS 暂停失败，请重试下发暂停。' : '已解绑来源并暂停 CMS 该季追更，历史来源已保留。', !!result.item?.cms_delivery?.error);
     }
   } catch (error) { if ($('#re0-picker-error')) $('#re0-picker-error').textContent = error.message; else toast(error.message, true); }
-  finally { button.disabled = false; if (action === 'bind' && button.isConnected) { const row = re0Picker.rows[Number(button.dataset.index)]; button.textContent = row?.can_bind ? '绑定并立即入库' : row?.can_unlock ? `解锁并立即入库 · ${row.unlock_points} 积分` : '价格待核对'; } }
+  finally { button.disabled = false; if (action === 'bind' && button.isConnected) { const row = re0Picker.rows[Number(button.dataset.index)]; button.textContent = re0BindLabel(row); } }
 });
 
 // Managed source fields are filled from RE0; episode notes remain editable.
