@@ -1,15 +1,30 @@
 import asyncio
 import copy
 import json
+from io import BytesIO
+from urllib.error import HTTPError
 from pathlib import Path
 from unittest.mock import Mock, patch
 import unittest
 from test_integrations import IntegrationTests
-from cms_client import CMSClient, canonical_re0_post_url
+from cms_client import CMSClient, CMSRequestRejected, RE0_REJECTIONS, canonical_re0_post_url
 from integrations import IntegrationError
 
 
 class RE0Tests(IntegrationTests):
+    def test_cms_rejection_returns_actionable_conflict_without_binding(self):
+        item = self.record()
+        cms = Mock(); cms.resolve.side_effect = CMSRequestRejected('RE0 解锁积分校验未通过，请重新打开来源列表。')
+        with patch.object(self.mod, 'cms_client', return_value=cms), patch.object(self.mod, 'sync_cms_item') as deliver:
+            response = self.client.post('/api/items/' + item['id'] + '/re0',
+                json=dict(slug='same-source', uploader='发布者甲', max_points=4), headers=self.headers)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('积分校验未通过', response.json['error'])
+        deliver.assert_not_called()
+        saved = self.client.get('/api/items').json['items'][0]
+        self.assertNotIn('re0', saved)
+        self.assertEqual(saved['sources'], item['sources'])
+
     def test_legacy_cms_web_origin_is_repaired_without_changing_source_identity(self):
         item = self.record(sources=[dict(id='legacy', sharer='发布者甲',
                     post_url='https://re0.me/resource/115/same-source',
@@ -135,6 +150,35 @@ class RE0Tests(IntegrationTests):
             visible=self.mod.item_for_user(item)
             self.assertNotIn('re0',visible)
             self.assertNotIn('sources',visible)
+
+
+class CMSRejectionTests(unittest.TestCase):
+    def test_only_known_validation_messages_are_returned_and_never_retried(self):
+        cases = [(json.dumps(dict(message=message)).encode(), expected)
+                 for message, expected in RE0_REJECTIONS.items()]
+        cases += [(b'<html>private-token</html>', None),
+                  (json.dumps(dict(message='private-token https://private.example')).encode(), None),
+                  (b'x' * 8193, None), (b'[]', None), (b'{"message": []}', None)]
+        for body, expected in cases:
+            with self.subTest(body=body[:40]):
+                opener = Mock()
+                stream = BytesIO(body)
+                opener.open.side_effect = HTTPError('http://cms.example', 400, 'unsafe', {}, stream)
+                with patch('integrations.build_opener', return_value=opener), \
+                        self.assertLogs('cms_client'), self.assertRaises(CMSRequestRejected) as caught:
+                    CMSClient('http://cms.example', 'private-token').call('resolve', dict(max_points=4))
+                self.assertEqual(opener.open.call_count, 1)
+                self.assertTrue(stream.closed)
+                self.assertEqual(str(caught.exception), expected or 'RE0 拒绝了当前来源请求，请重新打开来源列表后重试。')
+                self.assertNotIn('private-', str(caught.exception))
+
+    def test_cms_outage_stays_a_connection_failure(self):
+        opener = Mock()
+        opener.open.side_effect = HTTPError('http://cms.example', 502, 'unsafe', {}, BytesIO(b'private-token'))
+        with patch('integrations.build_opener', return_value=opener), self.assertRaises(IntegrationError) as caught:
+            CMSClient('http://cms.example', 'private-token').call('resolve', dict(max_points=4))
+        self.assertNotIsInstance(caught.exception, CMSRequestRejected)
+        self.assertEqual(opener.open.call_count, 1)
 
 
 class BridgeTests(unittest.TestCase):
