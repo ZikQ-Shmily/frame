@@ -49,7 +49,8 @@ def _shiying_operation(path, params):
             raise ValueError('原条目或发布者已变化，请重新选择来源')
         if not row['uploader']:
             raise ValueError('该条目缺少发布者，暂不能绑定追更')
-        if not row['is_unlocked'] and row['unlock_points'] != 0:
+        allow_unknown = params.get('allow_unknown_price') is True and row['unlock_points'] is None
+        if not row['is_unlocked'] and row['unlock_points'] != 0 and not allow_unknown:
             maximum = params.get('max_points')
             if (isinstance(maximum, bool) or not isinstance(maximum, (int, float)) or
                     not _shiying_math.isfinite(maximum) or maximum < 0 or
