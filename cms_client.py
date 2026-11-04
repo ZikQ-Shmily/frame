@@ -1,8 +1,22 @@
 """CMS RE0 queries and fixed-source subscriptions; OAuth stays in CMS."""
 import re
 import math
+import logging
 from urllib.parse import urlsplit, urlunsplit
-from integrations import fetch, IntegrationError, valid_emby_url
+from integrations import fetch, IntegrationError, IntegrationRequestError, valid_emby_url
+
+
+class CMSRequestRejected(IntegrationError):
+    """A source selection needs refreshing; the remote service is reachable."""
+
+
+RE0_REJECTIONS = {
+    '原条目或发布者已变化，请重新选择来源': 'RE0 条目或发布者已变化，请重新选择来源。',
+    '该条目缺少发布者，暂不能绑定追更': 'RE0 未提供发布者，暂不能绑定该来源。',
+    '该条目需要解锁或积分已变化，请刷新来源列表后点击解锁':
+        'RE0 解锁积分校验未通过，请重新打开来源列表，核对当前积分后再解锁。',
+    'RE0 没有返回有效的 115 分享链接': 'RE0 未返回有效的 115 链接，请在原帖核对解锁结果后再绑定。',
+}
 
 
 def canonical_re0_post_url(value):
@@ -23,9 +37,16 @@ class CMSClient:
             raise IntegrationError('请先配置用于 RE0 查询的 CMS 地址与连接密钥')
 
     def call(self, action, payload=None, timeout=65):
-        result = fetch(self.url + '/api/shiying/' + action,
-                       headers={'Authorization': 'Bearer ' + self.token}, body=payload, timeout=timeout,
-                       error_messages={400: 'RE0 条目或积分已变化，请刷新来源列表后重试'})
+        try:
+            result = fetch(self.url + '/api/shiying/' + action,
+                           headers={'Authorization': 'Bearer ' + self.token}, body=payload, timeout=timeout,
+                           error_messages={400: 'RE0 拒绝了当前来源请求，请重新打开来源列表后重试。'},
+                           rejected_messages=RE0_REJECTIONS)
+        except IntegrationRequestError as error:
+            if error.code == 'http_400':
+                logging.getLogger(__name__).warning('CMS source request rejected code=http_400')
+                raise CMSRequestRejected(str(error)) from None
+            raise
         if not isinstance(result, dict) or result.get('success') is not True:
             raise IntegrationError('CMS / RE0 查询失败，请检查 CMS 授权')
         return result
