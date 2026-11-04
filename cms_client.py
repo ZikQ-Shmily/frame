@@ -79,14 +79,16 @@ class CMSClient:
         result.update(is_unlocked=row.get('is_unlocked') is True,
                       unlock_points=points if isinstance(points, (int, float)) and not isinstance(points, bool) and math.isfinite(points) and points >= 0 else None)
         result['can_bind'] = bool(result['uploader']) and (result['is_unlocked'] or result['unlock_points'] == 0)
-        result['can_unlock'] = bool(result['uploader']) and result['unlock_points'] is not None and not result['can_bind']
+        result['can_unlock'] = bool(result['uploader']) and not result['can_bind']
         return result
 
-    def resolve(self, item, slug, uploader, max_points=None):
+    def resolve(self, item, slug, uploader, max_points=None, allow_unknown_price=False):
         meta = item['tmdb']
         payload = dict(media_type=meta['media_type'], tmdb_id=meta['id'], slug=slug, uploader=uploader)
         if max_points is not None:
             payload['max_points'] = max_points
+        if allow_unknown_price is True:
+            payload['allow_unknown_price'] = True
         row = self.call('resolve', payload).get('data')
         result = self.clean(row, meta)
         if result['slug'] != slug or result['uploader'] != uploader or not result['can_bind']:

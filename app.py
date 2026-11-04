@@ -1464,8 +1464,16 @@ def re0_bind(item_id):
     if max_points is not None and (isinstance(max_points, bool) or not isinstance(max_points, (int, float)) or
                                    not math.isfinite(max_points) or not 0 <= max_points <= 10**9):
         raise ValueError('解锁积分无效，请刷新来源列表')
+    allow_unknown_price = data.get('allow_unknown_price', False)
+    if not isinstance(allow_unknown_price, bool):
+        raise ValueError('解锁选项无效，请刷新来源列表')
     client = cms_client()
-    row = client.resolve(target, slug, uploader, max_points=max_points) if max_points is not None else client.resolve(target, slug, uploader)
+    options = {}
+    if max_points is not None:
+        options['max_points'] = max_points
+    if allow_unknown_price:
+        options['allow_unknown_price'] = True
+    row = client.resolve(target, slug, uploader, **options)
     with database() as db:
         db.execute('BEGIN IMMEDIATE')
         current = get_item(db, item_id)
