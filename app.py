@@ -28,6 +28,7 @@ from email_notifications import (DEFAULTS as MAIL_DEFAULTS, MailError,
     validate_config as validate_mail_config, require_ready as require_mail_ready, send_notification)
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature
 
 ROOT = Path(__file__).parent
 DATA = Path(os.environ.get('DATA_DIR', str(ROOT / 'data')))
@@ -45,6 +46,13 @@ app.config.update(SECRET_KEY=SECRET, MAX_CONTENT_LENGTH=8 * 1024 * 1024,
                   SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE') == 'true',
                   PERMANENT_SESSION_LIFETIME=dt.timedelta(days=7))
 app.json.ensure_ascii = False
+SCAN_RECEIPTS = URLSafeTimedSerializer(SECRET, salt='source-scan-v1')
+
+
+def scan_context(item, source):
+    values = [item['id'], source['id'], source.get('share_url', ''), source.get('code', ''),
+              source.get('episodes', ''), item.get('kind'), item.get('season'), (item.get('tmdb') or {}).get('id')]
+    return hashlib.sha256(json.dumps(values, ensure_ascii=False).encode()).hexdigest()
 
 
 @contextmanager
@@ -353,6 +361,18 @@ def normalize(data, item_id=None, existing=None):
         previous = next((value for value in old.get('sources', []) if value['id'] == source['id']), {})
         if previous.get('episode_scan') and all(source[key] == previous.get(key, '') for key in ('share_url', 'code', 'episodes')):
             source['episode_scan'] = copy.deepcopy(previous['episode_scan'])
+        submitted = next((value for value in sources if value.get('id') == source['id']), {})
+        receipt = submitted.get('scan_receipt')
+        if existing and previous and isinstance(receipt, str) and len(receipt) < 4096:
+            try:
+                proof = SCAN_RECEIPTS.loads(receipt, max_age=3600)
+                if (proof['context'] == scan_context(existing, previous) and
+                        source['share_url'] == previous['share_url'] and source['code'] == previous.get('code', '') and
+                        source['episodes'] == proof['episodes'] and kind == existing['kind'] and
+                        integer(data.get('season'), '季数') == existing.get('season')):
+                    source['episode_scan'] = dict(state='complete', checked_at=proof['checked_at'], last_success_at=proof['checked_at'])
+            except (BadSignature, KeyError, TypeError, ValueError):
+                pass
     # last_check is server controlled; imports may restore a valid historical timestamp.
     checked = old.get('last_check')
     candidate = data.get('last_check') if not existing else None
@@ -727,7 +747,11 @@ def source_episodes(item_id, source_id):
     result = read_share_episodes(source['share_url'], source.get('code', ''), season=item['season'],
                                 tmdb_id=meta.get('id'), air_dates=meta.get('air_dates', {}),
                                 media_type='movie' if item['kind'] == 'movie' else 'tv')
-    return jsonify(result=result, source_id=source_id)
+    receipt = None
+    if result.get('state') == 'complete' and result.get('episode_count', 0) > 0:
+        receipt = SCAN_RECEIPTS.dumps(dict(context=scan_context(item, source),
+            episodes=format_episodes(parse_episodes(result['episodes'])), checked_at=result.get('checked_at') or now()))
+    return jsonify(result=result, source_id=source_id, scan_receipt=receipt)
 
 
 @app.put('/api/items/<item_id>')
