@@ -798,3 +798,32 @@ body[data-layout="workspace"] .page-footer { flex:none; }
 @media(max-width:760px) { .source-scan-actions { flex-wrap:wrap; gap:7px; } .source-scan-status { font-size:11px; } }
 
 .progress-count .progress-unverified { font-size: 12px; color: var(--muted); }
+
+/* Desktop reading sizes follow the available browser viewport, not monitor pixels. */
+@media (min-width: 1000px) {
+  body { font-size:15px; }
+  body[data-role="admin"] .nav-list>.nav-item { min-height:36px; font-size:13px; }
+  .sidebar-bottom>.nav-item, .user-row strong, .service-title strong { font-size:13px; }
+  .connection-badge, .user-row small { font-size:11px; }
+  .page-description, .stat-top, .page-actions .button, .text-link { font-size:13px; }
+  .stat-note, .panel-heading p, .resource-meta, .source-episode-progress,
+  .overview-dashboard .legend-row, .activity-launcher-preview { font-size:12px; }
+  .resource-title, .overview-dashboard .progress-panel h3, .activity-launcher>strong { font-size:14px; }
+  .panel-heading h2 { font-size:16px; }
+  .resource-table th, .user-history-table th { font-size:12px; }
+  .resource-table td, .user-history-table td { font-size:13px; }
+  .status, .tiny-pill, .overview-dashboard .task-side small, .activity-launcher>time,
+  .activity-launcher-action, .source-episode-progress small { font-size:11px; }
+  .resource-filter-trigger, .resource-filter-option { font-size:13px; }
+  .overview-dashboard { grid-template-columns:minmax(0,1fr) clamp(246px, 19vw, 320px); }
+  .overview-dashboard .progress-ring { --ring-size:clamp(108px, 14dvh, 150px); }
+}
+@media (min-width: 1600px) {
+  .sidebar { width:240px; }
+  .main { margin-left:268px; }
+  .main .page-wrap { max-width:2000px; margin-inline:auto; padding-inline:clamp(22px, 1.6vw, 38px); }
+  .page-heading h1 { font-size:32px; }
+  .stat-card { padding:20px 24px; }
+  .stat-value { font-size:38px; }
+  .overview-dashboard { grid-template-columns:minmax(0,1fr) clamp(290px, 20vw, 370px); --overview-height:clamp(300px, calc(100dvh - 440px), 620px); }
+}
