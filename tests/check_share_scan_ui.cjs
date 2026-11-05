@@ -70,6 +70,9 @@ const status=()=>fields.get('.source-scan-status').textContent;
   assert(status().includes('未检测到电影正片'));
   run('example.sources[0].episodes="1";example.sources[0].episode_scan={state:"complete"}');
   assert(run('sourceEpisodeProgress(example)').includes('网盘已有正片'));
+  run('example.sources[0].episode_scan=null');
+  assert(run('sourceEpisodeProgress(example)').includes('网盘已有正片'));
+  assert(run('sourceEpisodeProgress(example)').includes('未保存检测时间'));
   assert(!run('sourceEpisodeProgress(example)').includes(' · 1'));
   // The detail uses one comparison block and no duplicate actual-library summary.
   const detail=fs.readFileSync(__dirname+'/../static/integration.js','utf8').split('function openIntegratedDetail(id)')[1].split('document.addEventListener')[0];
