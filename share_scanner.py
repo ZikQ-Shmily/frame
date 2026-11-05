@@ -206,7 +206,8 @@ def _read(share_code, password, season, tmdb_id, air_dates, minimum_interval, me
                         raise IntegrationError('115 返回的目录标识无效，原集数已保留')
                     pending.append((child, path, depth + 1))
                     continue
-                if PurePosixPath(name).suffix.lower() not in VIDEO_EXTENSIONS:
+                suffix = PurePosixPath(name).suffix.lower()
+                if suffix not in VIDEO_EXTENSIONS and not (media_type == 'movie' and suffix == '.iso'):
                     ignored += 1
                     continue
                 if media_type == 'movie':
