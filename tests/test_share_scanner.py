@@ -100,6 +100,29 @@ class SourceScanApiTests(unittest.TestCase):
         with self.mod.database() as db:
             return self.mod.get_item(db, item['id'])
 
+    def test_manual_scan_receipt_records_success_only_for_unchanged_source(self):
+        item = self.record(kind='movie', library_episodes='', sources=[dict(id='movie', share_url='https://115.com/s/film123')])
+        result = dict(state='complete', episodes='1', episode_count=1, checked_at='2026-11-06T00:35:00+08:00')
+        with patch.object(self.mod, 'read_share_episodes', return_value=result):
+            response = self.client.post('/api/items/' + item['id'] + '/sources/movie/episodes', json={}, headers=self.headers)
+        receipt = response.json['scan_receipt']
+        self.assertTrue(receipt)
+        self.assertNotIn('episode_scan', self.saved(item)['sources'][0])
+        payload = self.saved(item)
+        payload['sources'][0].update(episodes='1', scan_receipt=receipt)
+        with patch.object(self.mod, 'sync_cms_item'):
+            response = self.client.put('/api/items/' + item['id'], json=payload, headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(self.saved(item)['sources'][0]['episode_scan']['checked_at'], result['checked_at'])
+
+        another = self.record(kind='movie', library_episodes='', sources=[dict(id='movie', share_url='https://115.com/s/other123')])
+        payload = self.saved(another)
+        payload['sources'][0].update(episodes='1', scan_receipt=receipt)
+        with patch.object(self.mod, 'sync_cms_item'):
+            response = self.client.put('/api/items/' + another['id'], json=payload, headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertNotIn('episode_scan', self.saved(another)['sources'][0])
+
     def result(self, **changes):
         return dict(dict(state='complete', episodes='1-6', episode_count=6,
                          checked_at='2026-10-25T04:00:00+08:00'), **changes)

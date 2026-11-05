@@ -56,10 +56,10 @@ function sourceEpisodeInfo(item) {
       pendingLabel:'未确认', note, uncertain:false};
   }
   return {count:known ? episodeCount(source.episodes) : null,unit,
-    label:!source ? '未绑定来源' : !known ? item.kind === 'movie' ? '电影资源待检测' : '网盘集数待识别' : item.kind === 'movie' ? `${uncertain ? '上次记录有正片' : scan?.state === 'complete' ? '网盘已有正片' : '来源已记录正片'}` : `${uncertain ? '上次记录' : scan?.state === 'complete' ? '网盘已有' : '来源记录'} ${episodeCount(source.episodes)} ${unit}`,
+    label:!source ? '未绑定来源' : !known ? item.kind === 'movie' ? '电影资源待检测' : '网盘集数待识别' : item.kind === 'movie' ? `${uncertain ? '上次记录有正片' : '网盘已有正片'}` : `${uncertain ? '上次记录' : scan?.state === 'complete' ? '网盘已有' : '来源记录'} ${episodeCount(source.episodes)} ${unit}`,
     range:source?.episodes ? item.kind === 'movie' ? '已有电影正片' : source.episodes : (source ? item.kind === 'movie' ? '等待检测电影正片' : '等待识别当前来源' : '请先选择来源'),
     pendingLabel:item.kind === 'movie' ? '待检测' : '待识别',
-    note:scan?.message || (scan?.checked_at ? `识别于 ${stamp(scan.checked_at)}` : '随网站后台同步自动更新'),uncertain};
+    note:scan?.message || (scan?.checked_at ? `识别于 ${stamp(scan.checked_at)}` : known ? '来源已记录，未保存检测时间' : '随网站后台同步自动更新'),uncertain};
 }
 function sourceEpisodeProgress(item) {
   if (!sourceOf(item)) return '';
@@ -394,11 +394,12 @@ async function scanSourceEpisodes(button) {
   button.disabled = true; button.innerHTML = `${icon('refresh')}${movie ? '检测中…' : '识别中…'}`;
   status.textContent = movie ? '正在检测 115 分享目录中的电影正片…' : '正在读取 115 分享目录与视频集号…';
   try {
-    const {result} = await api(`/api/items/${encodeURIComponent(item.id)}/sources/${encodeURIComponent(source.id)}/episodes`, {method:'POST',body:{}});
+    const {result, scan_receipt} = await api(`/api/items/${encodeURIComponent(item.id)}/sources/${encodeURIComponent(source.id)}/episodes`, {method:'POST',body:{}});
     if (state.editing !== item || !card.isConnected || !$('#modal').open || !isAdministrator()) return;
     if (!unchanged() || input.value !== original || available?.checked !== originalAvailable) { status.textContent = movie ? '检测已完成，当前输入已变化，已保留你的修改。' : `识别到 ${result.episode_count} 集（${result.episodes || '暂无集号'}）。当前输入已变化，已保留你的修改。`; return; }
     if (result.state === 'complete' && result.episode_count > 0) {
       input.value = result.episodes;
+      card.dataset.scanReceipt = scan_receipt || '';
       if (movie && available) available.checked = true;
       status.textContent = movie ? `已检测到电影正片 · ${stamp(result.checked_at)}。保存修改后生效。` : `已识别 ${result.episode_count} 集：${result.episodes} · ${stamp(result.checked_at)}。保存修改后生效。`;
     } else if (result.state === 'partial') {
@@ -423,7 +424,7 @@ async function saveItem(event) {
   event.preventDefault(); const form = event.target; const button = $('button[type="submit"]', form); const errorNode = $('#item-error'); errorNode.textContent = '';
   try {
     const fields = new FormData(form); const movie = (fields.get('kind') || state.editing?.kind) === 'movie';
-    const sources = $$('.source-card', form).map(card => { const get = name => $(`[name="${name}"]`, card); const hasContent = ['sharer', 'post_url', 'share_url', 'code', 'version', 'episodes', 'note'].some(name => get(name).value.trim()) || get('broken').checked || (movie && get('movie_available').checked); if (!hasContent && card.dataset.existing !== '1') return null; return { id: card.dataset.sourceId, sharer: get('sharer').value.trim(), post_url: get('post_url').value.trim(), share_url: get('share_url').value.trim(), code: get('code').value.trim(), version: get('version').value.trim(), episodes: movie ? get('movie_available').checked ? '1' : '' : normalizeEpisodes(get('episodes').value, '来源集数'), broken: get('broken').checked, note: get('note').value.trim() }; }).filter(Boolean);
+    const sources = $$('.source-card', form).map(card => { const get = name => $(`[name="${name}"]`, card); const hasContent = ['sharer', 'post_url', 'share_url', 'code', 'version', 'episodes', 'note'].some(name => get(name).value.trim()) || get('broken').checked || (movie && get('movie_available').checked); if (!hasContent && card.dataset.existing !== '1') return null; return { id: card.dataset.sourceId, sharer: get('sharer').value.trim(), post_url: get('post_url').value.trim(), share_url: get('share_url').value.trim(), code: get('code').value.trim(), version: get('version').value.trim(), episodes: movie ? get('movie_available').checked ? '1' : '' : normalizeEpisodes(get('episodes').value, '来源集数'), scan_receipt: card.dataset.scanReceipt || '', broken: get('broken').checked, note: get('note').value.trim() }; }).filter(Boolean);
     const payload = { ...(state.editing || {}), title: String(fields.get('title') || '').trim(), kind: fields.get('kind') || state.editing?.kind || 'tv', year: numberOrNull(fields.get('year')), season: movie ? 1 : Number(fields.get('season') || state.editing?.season || 1), total_episodes: movie ? 1 : numberOrNull(fields.get('total_episodes')), tracking: fields.has('tracking'), finished: fields.has('finished'), completed: !movie && fields.has('completed'), library_episodes: movie ? fields.has('movie_library') ? '1' : '' : normalizeEpisodes(fields.get('library_episodes'), '入库集数'), sources, active_source_id: sources.some(source => source.id === fields.get('active_source_id')) ? fields.get('active_source_id') : sources[0]?.id || '', next_check: state.editing?.next_check || '', notes: String(fields.get('notes') || '').trim() };
     if (state.editing?.tmdb) for (const field of tmdbReadOnlyFields) payload[field] = state.editing[field];
     if (!payload.title) throw new Error('请填写作品名称。');
