@@ -73,6 +73,19 @@ class ShareScannerTests(unittest.TestCase):
             with patch.object(scanner, 'fetch', return_value=response), self.assertRaises(IntegrationError):
                 scanner.read_share_episodes('https://115.com/s/error123', minimum_interval=0)
 
+    def test_movie_iso_is_recognized_but_extras_small_files_and_tv_iso_are_not(self):
+        def scan(rows, media_type):
+            scanner._CACHE.clear()
+            with patch.object(scanner, 'fetch', return_value=dict(state=True, data=dict(count=len(rows), list=rows))):
+                return scanner.read_share_episodes('https://115.com/s/film123', media_type=media_type, minimum_interval=0)
+        large = 80 * 1024 * 1024
+        rows = [dict(fid='1', n='Miracles.1989.ISO', fc=1, s=large)]
+        self.assertEqual(scan(rows, 'movie')['episodes'], '1')
+        self.assertEqual(scan(rows, 'tv')['state'], 'empty')
+        for name, size in [('Trailer.iso', large), ('Movie.iso', 1024), ('Show.S01E01.iso', large)]:
+            with self.subTest(name=name):
+                self.assertEqual(scan([dict(fid='1', n=name, fc=1, s=size)], 'movie')['state'], 'empty')
+
 
 class SourceScanApiTests(unittest.TestCase):
     setUpClass = classmethod(integration_tests.IntegrationTests.setUpClass.__func__)

@@ -48,6 +48,13 @@ function sourceEpisodeInfo(item) {
   const source = sourceOf(item), scan = source?.episode_scan, unit = item.kind === 'movie' ? '部' : '集';
   const known = !!source?.episodes;
   const uncertain = !!scan && scan.state !== 'complete';
+  if (source && item.source_checks_paused && (!known || uncertain)) {
+    const note = `作品已收齐，自动来源检测已暂停。${scan?.message ? `上次检测：${scan.message}。` : ''}如需确认网盘来源，可在编辑资源中手动检测。`;
+    return {count:known ? episodeCount(source.episodes) : null, unit,
+      label:known ? item.kind === 'movie' ? '上次记录有正片' : `上次记录 ${episodeCount(source.episodes)} ${unit}` : '网盘来源未确认',
+      range:known ? item.kind === 'movie' ? '上次记录有电影正片' : source.episodes : '网盘来源尚未确认',
+      pendingLabel:'未确认', note, uncertain:false};
+  }
   return {count:known ? episodeCount(source.episodes) : null,unit,
     label:!source ? '未绑定来源' : !known ? item.kind === 'movie' ? '电影资源待检测' : '网盘集数待识别' : item.kind === 'movie' ? `${uncertain ? '上次记录有正片' : scan?.state === 'complete' ? '网盘已有正片' : '来源已记录正片'}` : `${uncertain ? '上次记录' : scan?.state === 'complete' ? '网盘已有' : '来源记录'} ${episodeCount(source.episodes)} ${unit}`,
     range:source?.episodes ? item.kind === 'movie' ? '已有电影正片' : source.episodes : (source ? item.kind === 'movie' ? '等待检测电影正片' : '等待识别当前来源' : '请先选择来源'),
@@ -360,7 +367,7 @@ function openEditor(id = null) { if (!isAdministrator()) return;
     <section class="form-section"><h3 class="section-label">04 <span>备注</span></h3><div class="form-grid"><label class="span-all">备注<textarea name="notes" maxlength="10000" placeholder="例如：等原分享者补齐，不更换其他版本">${esc(item.notes || '')}</textarea></label></div></section><p id="item-error" class="form-error" role="alert"></p></div><footer class="modal-footer"><button class="button secondary" type="button" data-action="close-modal">取消</button><button class="button primary" type="submit">${icon('check')}${existing ? '保存修改' : '加入片库'}</button></footer></form>`);
   const editing = state.editing;
   const selected = existing && sourceOf(existing);
-  if (selected?.share_url && !selected.episodes) setTimeout(() => {
+  if (selected?.share_url && !selected.episodes && !item.source_checks_paused) setTimeout(() => {
     if (state.editing !== editing || !$('#modal').open) return;
     const card = $$('.source-card').find(card => card.dataset.sourceId === selected.id);
     const button = card && $('[data-action="scan-source"]', card);
