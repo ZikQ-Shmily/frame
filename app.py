@@ -373,6 +373,8 @@ def normalize(data, item_id=None, existing=None):
     result['tracking'] = boolean(data.get('tracking', old.get('tracking', True)), '自动追更')
     result['tmdb'] = normalize_tmdb(old.get('tmdb') if existing else data.get('tmdb'))
     result['emby'] = copy.deepcopy(old.get('emby', {'state': 'never'}))
+    if type(old.get('collection_confirmed')) is bool:
+        result['collection_confirmed'] = old['collection_confirmed']
     result['events'] = copy.deepcopy(old.get('events', []))
     if old.get('re0') and active == old.get('active_source_id'):
         result['re0'] = copy.deepcopy(old['re0'])
@@ -476,6 +478,30 @@ def event(item, action, detail):
     item['events'] = (item.get('events', []) + [dict(at=now(), action=action, detail=detail)])[-100:]
 
 
+def collection_is_complete(item):
+    """Evaluate collection coverage without treating an unreachable Emby as empty."""
+    library = parse_episodes(item.get('library_episodes', ''))
+    total = item.get('total_episodes')
+    if total:
+        return set(range(1, total + 1)).issubset(library)
+    source = next((s for s in item.get('sources', []) if s['id'] == item.get('active_source_id')), None)
+    available = parse_episodes(source.get('episodes', '')) if source else set()
+    today = dt.datetime.now(TZ).date().isoformat()
+    aired = {int(number) for number, date in (item.get('tmdb') or {}).get('air_dates', {}).items()
+             if date and date < today}
+    return bool(item.get('completed') and library and not ((available | aired) - library))
+
+
+def source_checks_paused(item):
+    """Keep the last confirmed decision across failed or inconclusive comparisons."""
+    confirmed = item.get('collection_confirmed')
+    if type(confirmed) is bool:
+        return confirmed
+    # Migrate existing records only when their saved comparison is authoritative.
+    return bool(item.get('tmdb') and (item.get('emby') or {}).get('state') == 'matched'
+                and not (item.get('tmdb') or {}).get('metadata_error') and collection_is_complete(item))
+
+
 def decorate(item):
     item = dict(item)
     item['sources'] = [dict(source, post_url=canonical_re0_post_url(source.get('post_url', '')))
@@ -485,6 +511,7 @@ def decorate(item):
     item.setdefault('tracking', True)
     item.setdefault('events', [])
     item.setdefault('requesters', [])
+    item['source_checks_paused'] = source_checks_paused(item)
     source = next((s for s in item['sources'] if s['id'] == item['active_source_id']), None)
     available = parse_episodes(source['episodes']) if source else set()
     library = parse_episodes(item['library_episodes'])
@@ -540,7 +567,7 @@ def decorate(item):
         sync_errors.append('TMDB：' + item['tmdb']['metadata_error'])
     if item['emby'].get('state') == 'error':
         sync_errors.append('Emby：' + (item['emby'].get('error') or '入库比对失败'))
-    if (item.get('re0') or {}).get('error'):
+    if not source_checks_paused(item) and (item.get('re0') or {}).get('error'):
         sync_errors.append('RE0：' + item['re0']['error'])
     if (item.get('cms_delivery') or {}).get('error'):
         sync_errors.append('CMS：' + item['cms_delivery']['error'])
@@ -870,7 +897,7 @@ def refresh_source_episodes(item_id):
     with database() as db:
         snapshot = get_item(db, item_id)
     identity = source_scan_identity(snapshot) if snapshot else None
-    if not identity or not snapshot.get('tracking', True):
+    if not identity or not snapshot.get('tracking', True) or source_checks_paused(snapshot):
         return
     source = next(source for source in snapshot['sources'] if source['id'] == identity[0])
     meta = snapshot.get('tmdb') or {}
@@ -885,7 +912,7 @@ def refresh_source_episodes(item_id):
     with database() as db:
         db.execute('BEGIN IMMEDIATE')
         current = get_item(db, item_id)
-        if not current or not current.get('tracking', True) or source_scan_identity(current) != identity:
+        if not current or not current.get('tracking', True) or source_checks_paused(current) or source_scan_identity(current) != identity:
             return
         selected = next(source for source in current['sources'] if source['id'] == identity[0])
         if selected.get('episodes', '') != source.get('episodes', ''):
@@ -925,7 +952,7 @@ def source_refresh_worker():
 def start_source_refresh(item_id):
     with database() as db:
         item = get_item(db, item_id)
-    if not item or not item.get('tracking', True) or not source_scan_identity(item):
+    if not item or not item.get('tracking', True) or source_checks_paused(item) or not source_scan_identity(item):
         return False
     with SOURCE_REFRESH_LOCK:
         SOURCE_REFRESH_STATE['pending'].add(item_id)
@@ -1191,7 +1218,7 @@ def cms_payload(item, deleted=False):
     return dict(item_id=item['id'], media_type=meta.get('media_type'), tmdb_id=meta.get('id'),
         title=item['title'], year=item.get('year'), season=item['season'], poster_path=meta.get('poster_path', ''),
         slug=binding.get('slug', ''), uploader=binding.get('uploader', ''),
-        active=bool(item.get('re0') and item.get('tracking', True) and not deleted))
+        active=bool(item.get('re0') and item.get('tracking', True) and not deleted and not source_checks_paused(item)))
 
 
 def cms_fingerprint(payload, config):
@@ -1269,6 +1296,8 @@ def run_cms_item(item_id, start=False):
             item = get_item(db, item_id)
         if not item or not item.get('re0') or not item.get('tracking', True):
             raise ValueError('请先绑定来源并开启追更')
+        if start and source_checks_paused(item):
+            raise ValueError('作品已确认收齐，CMS 来源追更已暂停')
         payload = cms_payload(item)
         config = integration_config()
         fingerprint = cms_fingerprint(payload, config)
@@ -1485,7 +1514,7 @@ def re0_bind(item_id):
         db.execute('UPDATE items SET payload=? WHERE id=?', (json.dumps(current, ensure_ascii=False), item_id))
     start_source_refresh(item_id)
     sync_cms_item(item_id)
-    if current.get('tracking', True):
+    if current.get('tracking', True) and not source_checks_paused(current):
         run_cms_item(item_id, start=True)
     with database() as db:
         current = get_item(db, item_id)
@@ -1672,18 +1701,13 @@ def run_sync(item_id=None):
             except IntegrationError as error:
                 comparison_error = str(error)
                 failures.append('EMBY：' + comparison_error)
-            re0_result, re0_error = None, ''
-            if target.get('re0') and all(re0_connection(config)):
-                try:
-                    re0_result = cms_client(config).resolve(target, target['re0']['slug'], target['re0']['uploader'])
-                except IntegrationError as error:
-                    re0_error = str(error)
-                    failures.append('RE0：' + re0_error)
             with database() as db:
                 db.execute('BEGIN IMMEDIATE')
                 current = get_item(db, target['id'])
                 if not current or not current.get('tracking', True) or current.get('tmdb', {}).get('id') != meta['id'] or current['season'] != target['season']:
                     continue
+                # Preserve the previous verified state before recording any failed checks.
+                current.setdefault('collection_confirmed', source_checks_paused(current))
                 if metadata:
                     metadata.update(synced_at=now(), metadata_error='')
                     current['tmdb'] = normalize_tmdb(metadata)
@@ -1714,15 +1738,38 @@ def run_sync(item_id=None):
                     current['emby'] = dict(previous, state='error', checked_at=now(), error=comparison_error)
                     if previous.get('state') != 'error':
                         event(current, 'sync_error', 'Emby 入库比对失败，已保留上次进度。' + comparison_error)
-                if target.get('re0') and current.get('re0') == target['re0'] and (re0_result or re0_error):
+                if metadata and comparison and comparison['state'] == 'matched':
+                    current['collection_confirmed'] = collection_is_complete(current)
+                current['updated_at'] = now()
+                db.execute('UPDATE items SET payload=? WHERE id=?', (json.dumps(current, ensure_ascii=False), current['id']))
+                source_target = copy.deepcopy(current)
+            # Pause or resume the CMS subscription as soon as the verified state changes.
+            sync_cms_item(target['id'])
+            if source_checks_paused(source_target):
+                continue
+            re0_result, re0_error = None, ''
+            if source_target.get('re0') and all(re0_connection(config)):
+                try:
+                    re0_result = cms_client(config).resolve(source_target, source_target['re0']['slug'], source_target['re0']['uploader'])
+                except IntegrationError as error:
+                    re0_error = str(error)
+                    failures.append('RE0：' + re0_error)
+            if re0_result or re0_error:
+                with database() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    current = get_item(db, target['id'])
+                    if (not current or not current.get('tracking', True) or source_checks_paused(current) or
+                            current.get('re0') != source_target.get('re0') or
+                            current.get('tmdb', {}).get('id') != meta['id'] or current['season'] != target['season']):
+                        continue
                     if re0_result:
                         apply_re0(current, re0_result)
                     else:
                         if not current['re0'].get('error'):
                             event(current, 'sync_error', 'RE0 检查失败，保留上次来源与链接')
                         current['re0'].update(error=re0_error, checked_at=now())
-                current['updated_at'] = now()
-                db.execute('UPDATE items SET payload=? WHERE id=?', (json.dumps(current, ensure_ascii=False), current['id']))
+                    current['updated_at'] = now()
+                    db.execute('UPDATE items SET payload=? WHERE id=?', (json.dumps(current, ensure_ascii=False), current['id']))
             # Read the saved active URL after RE0 refresh, independently of TMDB/Emby success.
             refresh_source_episodes(target['id'])
         # Manually maintained titles also refresh their active share on the same schedule.

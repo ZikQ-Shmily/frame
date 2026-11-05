@@ -3,6 +3,7 @@ const re0Picker = { generation: 0, itemId: null, rows: [] };
 let cmsRunTimer;
 function cmsRunSection(item) {
   const run = item.cms_run, busy = ['queued', 'running', 'unconfirmed'].includes(run?.state);
+  if (item.source_checks_paused && !busy) return '<div class="cms-run-status" role="status"><p>已确认收齐，自动来源检查与网盘识别已暂停；仍会比对 Emby 和 TMDB。</p></div>';
   const label = {queued:'等待立即执行', running:'正在读取来源并转存', submitted:'已提交 CMS 转存', exists:'CMS 已有任务或记录', error:'本次执行失败', unknown:'执行结果待核对', unconfirmed:'正在确认执行请求', cancelled:'本次执行已取消'}[run?.state] || '绑定后会立即执行一次';
   return `<div class="cms-run-status" role="status"><strong>${esc(label)}</strong>${run?.message ? `<p>${esc(run.message)}</p>` : ''}${run?.updated_at ? `<p>${esc(stamp(run.updated_at))}</p>` : ''}<div class="settings-actions">${item.re0 && item.tracking !== false ? `<button class="button primary small" data-re0="run" data-id="${esc(item.id)}"${busy ? ' disabled' : ''}>${icon('download')}${busy ? '执行中…' : '立即入库一次'}</button><button class="text-link" data-re0="run-status" data-id="${esc(item.id)}">${icon('refresh')}刷新执行状态</button>` : ''}</div><p>立即提交当前固定链接；CMS 转存后自动整理，Emby 扫描后才算实际入库。后续仍按原定时计划追更。</p></div>`;
 }
@@ -30,7 +31,7 @@ function cmsDeliverySection(item) {
 }
 function re0BindingSection(item, trashed = false) {
   const binding = item.re0;
-  return `<section class="form-section re0-binding"><div class="settings-title-row"><h3 class="section-label">RE0 自动来源与 CMS 订阅</h3>${!trashed ? `<button class="button ${binding ? 'secondary' : 'primary'} small" data-re0="pick" data-id="${esc(item.id)}">${icon('search')}${binding ? '更换来源' : '选择 RE0 来源'}</button>` : ''}</div>${binding ? `<div class="note-block"><strong>${esc(binding.uploader)}</strong><p>${esc(binding.title)}</p><p>固定检查同一条目与发布者 · ${esc(stamp(binding.checked_at))}</p>${binding.error ? `<p class="form-error">${esc(binding.error)} · 上次链接已保留</p>` : ''}${!trashed ? `<button class="text-link" data-re0="unbind" data-id="${esc(item.id)}">解绑来源并暂停 CMS 该季追更</button>` : ''}</div>` : '<p class="form-hint">从 RE0 选择明确覆盖本季的版本，来源信息自动记录，绑定后自动识别网盘集数、立即执行一次转存，并将作品、季数、条目与固定发布者下发给你的 CMS。免费或已解锁条目可直接使用，收费条目可按显示的积分解锁。</p>'}${cmsDeliverySection(item)}<p class="form-hint">${connection.config?.re0_via_cms ? 'RE0 查询、解锁与订阅均使用你这台 CMS 自身的授权。' : 'RE0 查询经已授权 CMS，订阅交给你的 CMS 执行。'}CMS 按作品建一条媒体订阅，拾影逐季保存选定来源；自动检查仅使用选定条目，不自动换发布者或购买新的收费资源。</p></section>`;
+  return `<section class="form-section re0-binding"><div class="settings-title-row"><h3 class="section-label">RE0 自动来源与 CMS 订阅</h3>${!trashed ? `<button class="button ${binding ? 'secondary' : 'primary'} small" data-re0="pick" data-id="${esc(item.id)}">${icon('search')}${binding ? '更换来源' : '选择 RE0 来源'}</button>` : ''}</div>${binding ? `<div class="note-block"><strong>${esc(binding.uploader)}</strong><p>${esc(binding.title)}</p><p>固定检查同一条目与发布者 · ${esc(stamp(binding.checked_at))}</p>${binding.error && !item.source_checks_paused ? `<p class="form-error">${esc(binding.error)} · 上次链接已保留</p>` : ''}${!trashed ? `<button class="text-link" data-re0="unbind" data-id="${esc(item.id)}">解绑来源并暂停 CMS 该季追更</button>` : ''}</div>` : '<p class="form-hint">从 RE0 选择明确覆盖本季的版本，来源信息自动记录，绑定后自动识别网盘集数、立即执行一次转存，并将作品、季数、条目与固定发布者下发给你的 CMS。免费或已解锁条目可直接使用，收费条目可按显示的积分解锁。</p>'}${cmsDeliverySection(item)}<p class="form-hint">${connection.config?.re0_via_cms ? 'RE0 查询、解锁与订阅均使用你这台 CMS 自身的授权。' : 'RE0 查询经已授权 CMS，订阅交给你的 CMS 执行。'}CMS 按作品建一条媒体订阅，拾影逐季保存选定来源；自动检查仅使用选定条目，不自动换发布者或购买新的收费资源。</p></section>`;
 }
 async function openRe0Picker(id) {
   if (!isAdministrator()) return;
@@ -69,7 +70,7 @@ document.addEventListener('click', async event => {
       if (!row || (!row.can_bind && !row.can_unlock && !re0PriceUnknown(row))) return;
       button.textContent = row.can_bind ? '正在绑定…' : '正在解锁…';
       const result = await api(`/api/items/${encodeURIComponent(id)}/re0`, { method: 'POST', body: { slug: row.slug, uploader: row.uploader, ...(!row.can_bind && row.can_unlock && !re0PriceUnknown(row) ? { max_points: row.unlock_points } : {}), ...(re0PriceUnknown(row) ? { allow_unknown_price: true } : {}) } });
-      await refreshIntegrationStatus(false); await loadItems(); renderPage(); openDetail(id); scheduleIntegrationPoll(); toast(result.item?.cms_delivery?.error ? '来源已绑定，CMS 下发失败，可在详情重试。' : '已绑定固定来源，后台自动识别集数，并请求 CMS 立即执行一次；实际入库以 Emby 为准。', !!result.item?.cms_delivery?.error);
+      await refreshIntegrationStatus(false); await loadItems(); renderPage(); openDetail(id); scheduleIntegrationPoll(); toast(result.item?.cms_delivery?.error ? '来源已绑定，CMS 下发失败，可在详情重试。' : result.item?.source_checks_paused ? '来源已绑定；作品已收齐，自动来源检查与转存保持暂停。' : '已绑定固定来源，后台自动识别集数，并请求 CMS 立即执行一次；实际入库以 Emby 为准。', !!result.item?.cms_delivery?.error);
     } else if (action === 'run' || action === 'run-status') {
       const id = button.dataset.id;
       const result = await api(`/api/items/${encodeURIComponent(id)}/cms/run`, action === 'run' ? {method:'POST',body:{}} : {});
