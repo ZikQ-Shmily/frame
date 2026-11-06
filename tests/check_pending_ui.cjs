@@ -65,25 +65,25 @@ run('state.role="user"');node('#modal-content').innerHTML='user';run('openRecent
 assert.equal(node('#modal-content').innerHTML,'user');
 console.log('Verified pending count, reason filters, paused/unverified/date exclusion, completed sync errors, priority order, both table variants, escaped errors, detail guidance, legacy review history and normal user views.');
 // A same-day schedule is displayed independently of both past schedules and the actual library.
-const scheduled=base('today schedule',{tmdb:{id:300146},emby:{state:'matched'},aired_count:15,aired_episodes:'1-15',airing_today_count:1,airing_today_episodes:'16',not_aired_count:14,library_count:14,library_episodes:'1-14',missing_episodes:'15',request_active:true});
+const scheduled=base('today schedule',{tmdb:{id:300146},emby:{state:'matched'},aired_count:16,aired_episodes:'1-16',airing_today_count:1,airing_today_episodes:'16',not_aired_count:14,library_count:14,library_episodes:'1-14',missing_episodes:'15-16',request_active:true});
 run('state.role="admin";state.view="all";state.items='+JSON.stringify([scheduled]));
 html=run('embyComparison(state.items[0])');
 assert(html.includes('TMDB 已播 · 按排期')&&html.includes('今日排期 1 集')&&html.includes('第 16 集'));
-assert(html.includes('后续 / 日期待定')&&html.includes('不直接计入缺集'));
+assert(html.includes('后续 / 日期待定')&&html.includes('包含今日排期'));
 assert(run('integratedTableRow(state.items[0])').includes('今日排期 1 集'));
 run('state.role="user";openUserDetail("today schedule")');
 html=node('#modal-content').innerHTML;
-assert(html.includes('今日排期 1 集')&&html.includes('等待补齐：15。')&&!html.includes('等待补齐：15-16'));
+assert(html.includes('今日排期 1 集')&&html.includes('等待补齐：15-16。'));
 assert(run('userCard(state.items[0])').includes('今日排期'));
 assert(run('userHistoryRow(state.items[0])').includes('今日排期 1 集'));
 assert(!run('airingScheduleNotice({tmdb:null})'));
 assert(!run('airingScheduleNotice({tmdb:{},airing_today_count:0})').includes('<strong>'));
 assert(run('airingScheduleNotice({tmdb:{},kind:"movie",airing_today_count:1,airing_today_episodes:"1"})').includes('今日排期 1 部'));
-console.log('Verified same-day schedule display in admin/user detail, resource table, request cards/history, movie units and no false 15-16 missing label.');
+console.log('Verified same-day schedule display in admin/user detail, resource table, request cards/history, movie units and today included in missing episodes.');
 
 // A successful empty library is an ordinary pending title; metadata ambiguity remains distinct.
 const absent=base('not in library',{tmdb:{id:286171},emby:{state:'absent'},status:'pending',library_count:0,library_episodes:'',aired_count:28,missing_episodes:'1-28',request_active:true});
-const premiere={...absent,id:'premiere',status:'premiering',kind:'tv',aired_count:0,airing_today_count:4};
+const premiere={...absent,id:'premiere',status:'premiering',kind:'tv',aired_count:4,airing_today_count:4};
 run('state.items='+JSON.stringify([absent,premiere]));
 assert.equal(run('hasVerifiedLibrary(state.items[0])'),true);
 assert(run('statusBadge(state.items[0])').includes('追更中，待补集'));
