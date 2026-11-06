@@ -508,7 +508,7 @@ def collection_is_complete(item):
     available = parse_episodes(source.get('episodes', '')) if source else set()
     today = dt.datetime.now(TZ).date().isoformat()
     aired = {int(number) for number, date in (item.get('tmdb') or {}).get('air_dates', {}).items()
-             if date and date < today}
+             if date and date <= today}
     return bool(item.get('completed') and library and not ((available | aired) - library))
 
 
@@ -537,8 +537,8 @@ def decorate(item):
     library = parse_episodes(item['library_episodes'])
     today = dt.datetime.now(TZ).date().isoformat()
     dates = (item['tmdb'] or {}).get('air_dates', {})
-    # TMDB provides dates, not release times: today's schedule is not proof of availability.
-    aired = {int(number) for number, date in dates.items() if date and date < today}
+    # TMDB supplies dates rather than release times; include today's schedule as an estimate.
+    aired = {int(number) for number, date in dates.items() if date and date <= today}
     airing_today = {int(number) for number, date in dates.items() if date == today}
     missing = (available | aired) - library
     total = item['total_episodes']
@@ -546,7 +546,7 @@ def decorate(item):
     manual_complete = not total and item['completed'] and bool(library) and not missing
     if full or manual_complete:
         status = 'complete'
-    elif item['tmdb'] and airing_today and not aired and not library and not available:
+    elif item['tmdb'] and airing_today and not (aired - airing_today) and not library and not available:
         status = 'premiering'
     elif item['tmdb'] and dates and not aired and not library and not available:
         status = 'upcoming'
@@ -570,7 +570,7 @@ def decorate(item):
                 library_count=len(library), source_broken=bool(source and source['broken']),
                 aired_episodes=format_episodes(aired), aired_count=len(aired),
                 airing_today_episodes=format_episodes(airing_today), airing_today_count=len(airing_today),
-                not_aired_count=max(0, len(dates) - len(aired) - len(airing_today)))
+                not_aired_count=max(0, len(dates) - len(aired)))
     # Keep legacy check dates independent from actionable collection and sync issues.
     reasons = []
     verified = not item['tmdb'] or item['emby'].get('state') in ('matched', 'absent')
