@@ -129,28 +129,28 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(item['status'], 'upcoming')
         self.assertFalse(item['missing_episodes'])
 
-    def test_today_schedule_does_not_create_missing_episodes(self):
+    def test_today_schedule_counts_as_aired_and_missing(self):
         today = dt.datetime.now(self.mod.TZ).date()
         dates = {'1': (today - dt.timedelta(days=1)).isoformat(), '2': today.isoformat(),
                  '3': (today + dt.timedelta(days=1)).isoformat(), '4': ''}
         saved = self.record(sources=[dict(id='selected',share_url='https://115.com/s/test')],active_source_id='selected',tmdb=self.metadata(air_dates=dates))
         item = self.mod.decorate(dict(saved, emby={'state': 'matched'}))
-        self.assertEqual(item['aired_episodes'], '1')
+        self.assertEqual(item['aired_episodes'], '1-2')
         self.assertEqual(item['airing_today_episodes'], '2')
         self.assertEqual(item['airing_today_count'], 1)
         self.assertEqual(item['not_aired_count'], 2)
-        self.assertEqual(item['missing_episodes'], '')
-        self.assertFalse(item['needs_attention'])
+        self.assertEqual(item['missing_episodes'], '2')
+        self.assertTrue(item['needs_attention'])
         # Actual source availability and actual library contents remain independent of the schedule.
         sourced = self.mod.decorate(dict(item, sources=[dict(id='s', episodes='1-2', broken=False)], active_source_id='s'))
         self.assertEqual(sourced['missing_episodes'], '2')
         self.assertTrue(sourced['needs_attention'])
         collected = self.mod.decorate(dict(sourced, library_episodes='1-2'))
-        self.assertEqual(collected['aired_count'], 1)
+        self.assertEqual(collected['aired_count'], 2)
         self.assertEqual(collected['library_count'], 2)
         self.assertFalse(collected['needs_attention'])
 
-    def test_shanghai_midnight_moves_schedule_without_early_missing(self):
+    def test_shanghai_midnight_includes_new_today_schedule(self):
         saved = self.record(library_episodes='1', tmdb=self.metadata(
             air_dates={'1': '2026-10-22', '2': '2026-10-23', '3': '2026-10-24', '4': ''}))
         saved['emby'] = {'state': 'matched'}
@@ -160,9 +160,9 @@ class IntegrationTests(unittest.TestCase):
             def now(cls, tz=None):
                 return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
         for instant, aired, today, missing in [
-            (real_datetime(2026, 10, 22, 15, 59, tzinfo=dt.timezone.utc), '', '1', ''),
-            (real_datetime(2026, 10, 22, 16, 0, tzinfo=dt.timezone.utc), '1', '2', ''),
-            (real_datetime(2026, 10, 23, 16, 0, tzinfo=dt.timezone.utc), '1-2', '3', '2')]:
+            (real_datetime(2026, 10, 22, 15, 59, tzinfo=dt.timezone.utc), '1', '1', ''),
+            (real_datetime(2026, 10, 22, 16, 0, tzinfo=dt.timezone.utc), '1-2', '2', '2'),
+            (real_datetime(2026, 10, 23, 16, 0, tzinfo=dt.timezone.utc), '1-3', '3', '2-3')]:
             with self.subTest(instant=instant), patch.object(self.mod.dt, 'datetime', FrozenDateTime):
                 item = self.mod.decorate(saved)
                 self.assertEqual(item['aired_episodes'], aired)
@@ -174,25 +174,25 @@ class IntegrationTests(unittest.TestCase):
         saved = self.record(kind='movie', total_episodes=1, library_episodes='',
             tmdb=self.metadata(media_type='movie', total_episodes=1, air_dates={'1': today}))
         item = self.mod.decorate(dict(saved, emby={'state': 'matched'}))
-        self.assertEqual(item['aired_count'], 0)
+        self.assertEqual(item['aired_count'], 1)
         self.assertEqual(item['airing_today_count'], 1)
         self.assertEqual(item['not_aired_count'], 0)
         self.assertEqual(item['status'], 'premiering')
-        self.assertFalse(item['needs_attention'])
+        self.assertTrue(item['needs_attention'])
         item = self.mod.decorate(dict(item, library_episodes='1'))
         self.assertEqual(item['library_count'], 1)
         self.assertEqual(item['status'], 'complete')
 
-    def test_today_premiere_is_not_upcoming_or_early_missing(self):
+    def test_today_premiere_includes_todays_episodes(self):
         today = dt.datetime.now(self.mod.TZ).date().isoformat()
         saved = self.record(library_episodes='', tmdb=self.metadata(
             air_dates={'1': today, '2': today, '3': '2099-01-01', '4': ''}))
         item = self.mod.decorate(dict(saved, emby={'state': 'absent'}))
         self.assertEqual(item['status'], 'premiering')
-        self.assertEqual(item['aired_count'], 0)
+        self.assertEqual(item['aired_count'], 2)
         self.assertEqual(item['airing_today_count'], 2)
-        self.assertFalse(item['missing_episodes'])
-        self.assertFalse(item['needs_attention'])
+        self.assertEqual(item['missing_episodes'], '1-2')
+        self.assertTrue(item['needs_attention'])
 
     def test_unbound_aired_work_is_wanted_then_bound_work_is_pending(self):
         saved = self.record(library_episodes='')

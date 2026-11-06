@@ -17,7 +17,7 @@ function todayScheduleSummary(item) {
 function airingScheduleNotice(item) {
   if (!item.tmdb) return '';
   const summary = todayScheduleSummary(item);
-  return `<div class="airing-schedule-note">${summary ? `<p>${icon('clock')}<strong>${esc(summary)}</strong><span>${item.kind === 'movie' ? '今日上映排期' : `第 ${esc(item.airing_today_episodes)} 集`}</span></p>` : ''}<small>已播按北京时间昨日及以前的 TMDB 排期估算。当天排期单独显示，不直接计入缺集；实际入库以 Emby 为准。</small></div>`;
+  return `<div class="airing-schedule-note">${summary ? `<p>${icon('clock')}<strong>${esc(summary)}</strong><span>${item.kind === 'movie' ? '今日上映排期' : `第 ${esc(item.airing_today_episodes)} 集`}</span></p>` : ''}<small>已播按北京时间截至今天的 TMDB 排期估算，包含今日排期；TMDB 不提供准确播出时间，实际入库以 Emby 为准。</small></div>`;
 }
 
 function airedCount(item) { return Number.isFinite(item.aired_count) ? item.aired_count : episodeCount(item.aired_episodes); }
