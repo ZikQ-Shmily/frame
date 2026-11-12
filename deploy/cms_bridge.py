@@ -1,11 +1,11 @@
 """Inserted into the existing CMS plugin; reuses its in-process OAuth client."""
-import math as _shiying_math
-import hmac as _shiying_hmac
-import threading as _shiying_threading
-_shiying_lock = _shiying_threading.Lock()
+import math as _frame_math
+import hmac as _frame_hmac
+import threading as _frame_threading
+_frame_lock = _frame_threading.Lock()
 
 
-def _shiying_resources(params):
+def _frame_resources(params):
     media_type, tmdb_id = params.get('media_type'), str(params.get('tmdb_id', ''))
     if media_type not in ('tv', 'movie') or not tmdb_id.isdecimal() or not 0 < int(tmdb_id) < 10**10:
         raise ValueError('作品标识无效')
@@ -22,7 +22,7 @@ def _shiying_resources(params):
         points = raw.get('unlock_points')
         try:
             points = float(points) if not isinstance(points, bool) else None
-            if points is not None and (points < 0 or not _shiying_math.isfinite(points)): points = None
+            if points is not None and (points < 0 or not _frame_math.isfinite(points)): points = None
         except (ValueError, TypeError):
             points = None
         def joined(value):
@@ -36,12 +36,12 @@ def _shiying_resources(params):
     return rows[:1000]
 
 
-def _shiying_operation(path, params):
-    if path == '/api/shiying/status':
+def _frame_operation(path, params):
+    if path == '/api/frame/status':
         return dict(success=True, version=1, available=bool(hdhive_client.available))
-    with _shiying_lock:
-        rows = _shiying_resources(params)
-        if path == '/api/shiying/search':
+    with _frame_lock:
+        rows = _frame_resources(params)
+        if path == '/api/frame/search':
             return dict(success=True, data=rows)
         slug, uploader = params.get('slug'), params.get('uploader')
         row = next((r for r in rows if r['slug'] == slug and r['uploader'] == uploader), None)
@@ -53,7 +53,7 @@ def _shiying_operation(path, params):
         if not row['is_unlocked'] and row['unlock_points'] != 0 and not allow_unknown:
             maximum = params.get('max_points')
             if (isinstance(maximum, bool) or not isinstance(maximum, (int, float)) or
-                    not _shiying_math.isfinite(maximum) or maximum < 0 or
+                    not _frame_math.isfinite(maximum) or maximum < 0 or
                     row['unlock_points'] is None or row['unlock_points'] > maximum):
                 raise ValueError('该条目需要解锁或积分已变化，请刷新来源列表后点击解锁')
         result = hdhive_client.unlock(slug)
@@ -73,20 +73,20 @@ def _shiying_operation(path, params):
         return dict(success=True, data=row)
 
 
-async def _shiying_bridge(scope, receive, send):
+async def _frame_bridge(scope, receive, send):
     import asyncio
     path = scope['path']
     status, result = 200, None
     try:
         from pathlib import Path
-        token_path = Path('/config/shiying-bridge.token')
+        token_path = Path('/config/frame-bridge.token')
         if not token_path.exists():
-            token_path = Path('/config/shiying-executor.token')
+            token_path = Path('/config/frame-executor.token')
         token = token_path.read_text().strip()
         authorization = dict(scope.get('headers', [])).get(b'authorization', b'').decode('ascii', 'ignore')
-        if len(token) < 32 or not _shiying_hmac.compare_digest(authorization, 'Bearer ' + token):
+        if len(token) < 32 or not _frame_hmac.compare_digest(authorization, 'Bearer ' + token):
             status, result = 401, dict(success=False, message='桥接凭据无效')
-        elif path not in ('/api/shiying/status', '/api/shiying/search', '/api/shiying/resolve'):
+        elif path not in ('/api/frame/status', '/api/frame/search', '/api/frame/resolve'):
             status, result = 404, dict(success=False, message='接口不存在')
         elif scope.get('method') != ('GET' if path.endswith('/status') else 'POST'):
             status, result = 405, dict(success=False, message='请求方法无效')
@@ -100,7 +100,7 @@ async def _shiying_bridge(scope, receive, send):
                 if not message.get('more_body'): break
             params = json.loads(raw) if raw else {}
             if not isinstance(params, dict): raise ValueError('请求格式无效')
-            result = await asyncio.get_running_loop().run_in_executor(None, _shiying_operation, path, params)
+            result = await asyncio.get_running_loop().run_in_executor(None, _frame_operation, path, params)
     except ValueError as error:
         status, result = 400, dict(success=False, message=str(error))
     except Exception:
