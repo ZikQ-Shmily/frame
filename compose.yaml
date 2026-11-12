@@ -1,6 +1,6 @@
 services:
   web:
-    image: ${SHIYING_IMAGE:-ghcr.io/zikq-shmily/shiying:latest}
+    image: ${FRAME_IMAGE:-ghcr.io/zikq-shmily/frame:latest}
     restart: unless-stopped
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8787}:8000"

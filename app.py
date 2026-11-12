@@ -26,6 +26,7 @@ from cms_client import CMSClient, CMSExecutor, CMSRequestRejected, canonical_re0
 from share_scanner import read_share_episodes
 from email_notifications import (DEFAULTS as MAIL_DEFAULTS, MailError,
     validate_config as validate_mail_config, require_ready as require_mail_ready, send_notification)
+from frame_migration import migrate_credentials
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature
@@ -105,6 +106,8 @@ with database() as db:
     ''')
     if 'identity' not in {row['name'] for row in db.execute('PRAGMA table_info(sessions)')}:
         db.execute('ALTER TABLE sessions ADD COLUMN identity TEXT')
+    db.commit()
+    migrate_credentials(db, SECRET)
     migrate_re0_post_urls(db)
     if not db.execute("SELECT value FROM settings WHERE key='password'").fetchone():
         initial = os.environ.get('ADMIN_PASSWORD', '')
@@ -148,7 +151,7 @@ def authenticated():
             return False
         if time.time() - identity.get('checked_at', 0) >= 60:
             try:
-                user = EmbyUserClient(identity['emby_url'], decrypt_secret(identity['token']), identity.get('device_id', 'shiying')).user(identity['emby_user_id'])
+                user = EmbyUserClient(identity['emby_url'], decrypt_secret(identity['token']), identity.get('device_id', 'frame')).user(identity['emby_user_id'])
             except EmbyAuthError:
                 with database() as db:
                     db.execute('DELETE FROM sessions WHERE id=?', (hashlib.sha256(sid.encode()).hexdigest(),))
@@ -686,7 +689,7 @@ def logout():
     session.clear()
     if identity['provider'] == 'emby':
         try:
-            EmbyUserClient(identity['emby_url'], decrypt_secret(identity['token']), identity.get('device_id', 'shiying')).logout()
+            EmbyUserClient(identity['emby_url'], decrypt_secret(identity['token']), identity.get('device_id', 'frame')).logout()
         except IntegrationError:
             pass  # Local session has already been revoked even if Emby is unreachable.
     return jsonify(ok=True)
@@ -985,12 +988,12 @@ def start_source_refresh(item_id):
         SOURCE_REFRESH_STATE['running'] = True
     threading.Thread(target=source_refresh_worker, daemon=True, name='source-episodes').start()
     return True
-CIPHER = AESGCM(hashlib.sha256(('shiying-integrations-v1:' + SECRET).encode()).digest())
+CIPHER = AESGCM(hashlib.sha256(('frame-integrations-v1:' + SECRET).encode()).digest())
 
 
 def encrypt_secret(value):
     nonce = secrets.token_bytes(12)
-    return base64.urlsafe_b64encode(nonce + CIPHER.encrypt(nonce, value.encode(), b'shiying-config-v1')).decode()
+    return base64.urlsafe_b64encode(nonce + CIPHER.encrypt(nonce, value.encode(), b'frame-config-v1')).decode()
 
 
 def decrypt_secret(value):
@@ -998,7 +1001,7 @@ def decrypt_secret(value):
         return ''
     try:
         raw = base64.urlsafe_b64decode(value)
-        return CIPHER.decrypt(raw[:12], raw[12:], b'shiying-config-v1').decode()
+        return CIPHER.decrypt(raw[:12], raw[12:], b'frame-config-v1').decode()
     except Exception:
         raise IntegrationError('连接凭据无法解密，请重新填写；迁移时请一并保留原 SECRET_KEY') from None
 

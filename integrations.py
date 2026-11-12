@@ -346,7 +346,7 @@ class EmbyClient:
 
 class EmbyUserClient:
     """Authenticate with the user's credentials, never the service API key."""
-    def __init__(self, base_url, token='', device_id='shiying'):
+    def __init__(self, base_url, token='', device_id='frame'):
         self.base_url = valid_emby_url(base_url)
         self.token = token
         self.authorization = ('Emby Client="FRAME", Device="Web", DeviceId="%s", Version="3.0"' % device_id)

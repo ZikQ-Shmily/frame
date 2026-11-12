@@ -38,7 +38,7 @@ class CMSClient:
 
     def call(self, action, payload=None, timeout=65):
         try:
-            result = fetch(self.url + '/api/shiying/' + action,
+            result = fetch(self.url + '/api/frame/' + action,
                            headers={'Authorization': 'Bearer ' + self.token}, body=payload, timeout=timeout,
                            error_messages={400: 'RE0 拒绝了当前来源请求，请重新打开来源列表后重试。'},
                            rejected_messages=RE0_REJECTIONS)
@@ -110,7 +110,7 @@ class CMSExecutor:
             raise IntegrationError('请先配置 CloudMediaSync 地址与连接密钥')
 
     def call(self, action, payload=None):
-        result = fetch(self.url + '/api/shiying-executor/' + action,
+        result = fetch(self.url + '/api/frame-executor/' + action,
             headers={'Authorization': 'Bearer ' + self.token}, body=payload, timeout=80 if payload else 15,
             error_messages={400: 'CMS 拒绝下发：请检查是否已有独立订阅，或固定来源、发布者已变化'})
         if not isinstance(result, dict) or result.get('success') is not True:

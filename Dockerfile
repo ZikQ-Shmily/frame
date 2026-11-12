@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATA_DIR=/app/data TZ=Asia/Shan
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && groupadd -g 10001 media && useradd -u 10001 -g media -M media
-COPY app.py integrations.py cms_client.py share_scanner.py email_notifications.py ./
+COPY app.py integrations.py cms_client.py share_scanner.py email_notifications.py frame_migration.py ./
 COPY static ./static
 USER 10001:10001
 EXPOSE 8000
