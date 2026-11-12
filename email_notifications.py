@@ -124,7 +124,7 @@ def build_message(config, payload, recipient, message_id):
     message['From'] = Address(display_name='拾影', addr_spec=config['from_email'])
     message['To'] = recipient
     message['Date'] = formatdate(localtime=True)
-    message['Message-ID'] = '<%s@shiying.local>' % message_id
+    message['Message-ID'] = '<%s@frame.local>' % message_id
     message.set_content(heading + '\n\n' + '\n'.join(lines) + '\n\n' + '\n'.join(label + '：' + url for label, url in links))
     escape = lambda value: html.escape(str(value), quote=True)
     intro = 'SMTP 发信配置已通过测试。' if test else '一部新的作品正在等待你整理。'
@@ -156,9 +156,9 @@ def build_message(config, payload, recipient, message_id):
               '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf3fb"><tr><td align="center" style="padding:32px 14px">'
               '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px">'
               '<tr><td style="padding:0 5px 22px;color:#25466c;font-size:21px;font-weight:bold;letter-spacing:2px">拾影 '
-              '<span style="font-size:10px;font-weight:normal;letter-spacing:3px;color:#829bb9">SHIYING</span></td></tr>'
+              '<span style="font-size:10px;font-weight:normal;letter-spacing:3px;color:#829bb9">FRAME</span></td></tr>'
               '<tr><td style="padding:32px 28px;background:#ffffff;border:1px solid #e3ecf8;border-radius:24px">'
-              '<p style="margin:0 0 10px;color:#7b9ac0;font-size:11px;letter-spacing:2px">SHIYING NOTIFICATIONS</p>'
+              '<p style="margin:0 0 10px;color:#7b9ac0;font-size:11px;letter-spacing:2px">FRAME NOTIFICATIONS</p>'
               '<h1 style="margin:0 0 10px;font-size:25px;line-height:1.4;color:#203959">' + escape(heading) + '</h1>'
               '<p style="margin:0 0 24px;color:#7189a6;font-size:14px;line-height:1.7">' + escape(intro) + '</p>'
               '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:22px;'

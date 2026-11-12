@@ -843,7 +843,7 @@ def export_backup():
         item['deleted_at'] = row['deleted_at']
         result.append(item)
     response = jsonify(schema_version=1, exported_at=now(), items=result)
-    filename = dt.datetime.now(TZ).strftime('shiying-backup-%Y%m%d-%H%M%S.json')
+    filename = dt.datetime.now(TZ).strftime('frame-backup-%Y%m%d-%H%M%S.json')
     response.headers['Content-Disposition'] = 'attachment; filename=' + filename
     return response
 
