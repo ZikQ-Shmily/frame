@@ -126,9 +126,46 @@ def build_message(config, payload, recipient, message_id):
     message['Date'] = formatdate(localtime=True)
     message['Message-ID'] = '<%s@shiying.local>' % message_id
     message.set_content(heading + '\n\n' + '\n'.join(lines) + '\n\n' + '\n'.join(label + '：' + url for label, url in links))
-    markup = ''.join('<p style="line-height:1.8">' + html.escape(line) + '</p>' for line in lines)
-    markup += ''.join('<p><a href="' + html.escape(url, quote=True) + '">' + label + '</a></p>' for label, url in links)
-    message.add_alternative('<html><body style="font-family:Arial,sans-serif;color:#243c5c;max-width:600px;margin:32px auto;padding:24px"><h2>' + heading + '</h2>' + markup + '<hr><p style="color:#718198;font-size:12px">拾影 · 追更提交通知</p></body></html>', subtype='html')
+    escape = lambda value: html.escape(str(value), quote=True)
+    intro = 'SMTP 发信配置已通过测试。' if test else '一部新的作品正在等待你整理。'
+    if test:
+        detail = '<p style="margin:0;color:#526b8c;font-size:15px;line-height:1.8">邮件通知已准备就绪，新的追更提交会发送到此邮箱。</p>'
+    else:
+        fields = [('提交用户', username or '未知用户'), ('作品类型', '电影' if movie else '剧集'),
+                  ('年份', payload.get('year') or '待定'), ('提交时间', payload.get('submitted_at') or '未知')]
+        rows = ''.join('<tr><td style="padding:9px 0;color:#8191a8;font-size:13px;white-space:nowrap;vertical-align:top">'
+                       + escape(label) + '</td><td style="padding:9px 0 9px 20px;text-align:right;color:#344f72;'
+                       'font-size:14px;word-break:break-word">' + escape(value) + '</td></tr>' for label, value in fields)
+        detail = ('<p style="margin:0 0 8px;color:#778fad;font-size:11px;letter-spacing:2px">NEW REQUEST</p>'
+                  '<h2 style="margin:0 0 20px;color:#203959;font-size:22px;line-height:1.45;word-break:break-word">'
+                  + escape(work) + '</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+                  'style="border-top:1px solid #e5ecf6;padding-top:12px">' + rows + '</table>')
+    actions = ''
+    if site:
+        actions += ('<table role="presentation" cellspacing="0" cellpadding="0" style="margin:26px 0 0"><tr><td '
+                    'bgcolor="#176ad1" style="border-radius:22px"><a href="' + escape(site + '/#all')
+                    + '" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:14px;'
+                    'font-weight:bold;text-decoration:none">打开拾影 &rarr;</a></td></tr></table>')
+    if tmdb_url and not test:
+        actions += ('<p style="margin:20px 0 0"><a href="' + escape(tmdb_url)
+                    + '" style="color:#5982b5;font-size:13px;text-decoration:underline">查看 TMDB 作品资料</a></p>')
+    markup = ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+              '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+              '<body style="margin:0;padding:0;background:#edf3fb;color:#203959;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif">'
+              '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + escape(heading + ' · ' + intro) + '</div>'
+              '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf3fb"><tr><td align="center" style="padding:32px 14px">'
+              '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px">'
+              '<tr><td style="padding:0 5px 22px;color:#25466c;font-size:21px;font-weight:bold;letter-spacing:2px">拾影 '
+              '<span style="font-size:10px;font-weight:normal;letter-spacing:3px;color:#829bb9">SHIYING</span></td></tr>'
+              '<tr><td style="padding:32px 28px;background:#ffffff;border:1px solid #e3ecf8;border-radius:24px">'
+              '<p style="margin:0 0 10px;color:#7b9ac0;font-size:11px;letter-spacing:2px">SHIYING NOTIFICATIONS</p>'
+              '<h1 style="margin:0 0 10px;font-size:25px;line-height:1.4;color:#203959">' + escape(heading) + '</h1>'
+              '<p style="margin:0 0 24px;color:#7189a6;font-size:14px;line-height:1.7">' + escape(intro) + '</p>'
+              '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:22px;'
+              'background:#f2f7fe;border:1px solid #e3edf9;border-radius:18px">' + detail + '</td></tr></table>' + actions
+              + '</td></tr><tr><td style="padding:22px 6px;color:#8a9bb1;font-size:12px;line-height:1.7">'
+              '拾影 · 收好每一段故事<br>此邮件由拾影自动发送。</td></tr></table></td></tr></table></body></html>')
+    message.add_alternative(markup, subtype='html')
     return message
 
 
