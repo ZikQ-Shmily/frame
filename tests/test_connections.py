@@ -25,7 +25,7 @@ class ConnectionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix='shiying-connections-')
+        cls.temp = tempfile.TemporaryDirectory(prefix='frame-connections-')
         with patch.dict(os.environ, dict(DATA_DIR=cls.temp.name, SECRET_KEY=secrets.token_hex(32),
                         ADMIN_USERNAME='tester', ADMIN_PASSWORD='Connection-Test-12345', ENABLE_SCHEDULER='false')):
             spec = importlib.util.spec_from_file_location('connections_test_app', Path(__file__).parents[1] / 'app.py')
@@ -155,7 +155,7 @@ class ConnectionTests(unittest.TestCase):
         client = CMSClient('http://cms.example:9526','SECRET')
         with patch('cms_client.fetch',return_value=dict(success=True,version=1,available=True)) as fetch:
             client.test()
-            self.assertEqual(fetch.call_args.args[0],'http://cms.example:9526/api/shiying/status')
+            self.assertEqual(fetch.call_args.args[0],'http://cms.example:9526/api/frame/status')
             self.assertEqual(fetch.call_args.kwargs['timeout'],12)
             self.assertIsNone(fetch.call_args.kwargs['body'])
         with patch.object(client,'call',return_value=dict(success=True,version=1,available=False)):

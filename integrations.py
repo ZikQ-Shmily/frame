@@ -57,7 +57,7 @@ def fetch(url, headers=None, binary=False, maximum=6 * 1024 * 1024, body=None, t
           rejected_messages=None):
     """No redirects: an Emby token must never follow a redirect to another host."""
     try:
-        request_headers = {'User-Agent': 'Shiying/3.0', 'Accept': 'application/json', **(headers or {})}
+        request_headers = {'User-Agent': 'FRAME/3.0', 'Accept': 'application/json', **(headers or {})}
         if body is not None:
             request_headers['Content-Type'] = 'application/json'
         req = Request(url, data=json.dumps(body).encode() if body is not None else None, headers=request_headers)
@@ -346,10 +346,10 @@ class EmbyClient:
 
 class EmbyUserClient:
     """Authenticate with the user's credentials, never the service API key."""
-    def __init__(self, base_url, token='', device_id='shiying'):
+    def __init__(self, base_url, token='', device_id='frame'):
         self.base_url = valid_emby_url(base_url)
         self.token = token
-        self.authorization = ('Emby Client="Shiying", Device="Web", DeviceId="%s", Version="3.0"' % device_id)
+        self.authorization = ('Emby Client="FRAME", Device="Web", DeviceId="%s", Version="3.0"' % device_id)
 
     def request(self, path, body=None):
         headers = {'X-Emby-Authorization': self.authorization}

@@ -9,17 +9,17 @@ import time as _sx_time
 from pathlib import Path as _SX_Path
 
 _sx_lock = _sx_threading.RLock()
-_SX_KEY = 'cms_shiying_subscriptions_v1'
+_SX_KEY = 'cms_frame_subscriptions_v1'
 _sx_transfer_lock = _sx_threading.Lock()
 _sx_running_ids = set()
 
 
 def _sx_established():
-    return _SX_Path('/config/shiying-registry-established').exists()
+    return _SX_Path('/config/frame-registry-established').exists()
 
 
 def _sx_mark_established():
-    marker = _SX_Path('/config/shiying-registry-established')
+    marker = _SX_Path('/config/frame-registry-established')
     marker.touch(mode=0o600, exist_ok=True)
 
 
@@ -39,13 +39,13 @@ def _sx_save(value):
 
 
 def _sx_gateway_config():
-    value = json.loads(_SX_Path('/config/shiying-executor.json').read_text())
+    value = json.loads(_SX_Path('/config/frame-executor.json').read_text())
     from urllib.parse import urlsplit
     if value.get('query_mode') == 'local':
         parsed = urlsplit(value.get('public_gateway_url', ''))
         if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError('CMS 本机查询地址无效')
-        if not callable(globals().get('_shiying_operation')):
+        if not callable(globals().get('_frame_operation')):
             raise RuntimeError('CMS 本机 RE0 查询模块未安装')
         return dict(value, gateway_url=value['public_gateway_url'])
     parsed = urlsplit(value['gateway_url'])
@@ -58,7 +58,7 @@ def _sx_guards_ready():
     try:
         from app.modules.tg.tg_scraper import TelegramScraper
         return bool(_sub_sync_patched and _sx_native_tuple is not None and
-                    all(getattr(getattr(TelegramScraper, name), '_shiying_source_guard', False)
+                    all(getattr(getattr(TelegramScraper, name), '_frame_source_guard', False)
                         for name in ('search', 'search_all')))
     except Exception:
         return False
@@ -69,12 +69,12 @@ def _sx_gateway(action, payload=None):
     if config.get('query_mode') == 'local':
         if action not in ('status', 'search', 'resolve'):
             raise ValueError('RE0 操作无效')
-        return _shiying_operation('/api/shiying/' + action, payload or {})
+        return _frame_operation('/api/frame/' + action, payload or {})
     from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
     class NoRedirect(HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None
-    request = Request(config['gateway_url'].rstrip('/') + '/api/shiying/' + action,
+    request = Request(config['gateway_url'].rstrip('/') + '/api/frame/' + action,
                       data=json.dumps(payload).encode() if payload is not None else None,
                       headers={'Authorization': 'Bearer ' + config['gateway_token'], 'Content-Type': 'application/json'})
     with build_opener(ProxyHandler({}), NoRedirect).open(request, timeout=65 if payload else 12) as response:
@@ -206,7 +206,7 @@ def _sx_run_worker(item_id, request_id):
 
 def _sx_start_run_worker(item_id, request_id):
     _sx_threading.Thread(target=_sx_run_worker, args=(item_id, request_id), daemon=True,
-                         name='shiying-immediate-transfer').start()
+                         name='frame-immediate-transfer').start()
 
 
 def _sx_run_once(params):
@@ -374,7 +374,7 @@ def _patch_share_down_service(module):
         raise RuntimeError('拾影来源保护必须在 CMS 订阅 Hook 初始化时安装')
     for name in ('search', 'search_all'):
         original = getattr(TelegramScraper, name)
-        if getattr(original, '_shiying_source_guard', False):
+        if getattr(original, '_frame_source_guard', False):
             continue
         def wrap(method, method_name):
             def guarded(self, q=None, *args, **kwargs):
@@ -388,13 +388,13 @@ def _patch_share_down_service(module):
                             tuple_result = method_name == 'search' and _sx_native_tuple
                             return ([], None) if tuple_result else []
                 return method(self, q, *args, **kwargs)
-            guarded._shiying_source_guard = True
+            guarded._frame_source_guard = True
             return guarded
         setattr(TelegramScraper, name, wrap(original, name))
 
 
 def _sx_operation(path, params):
-    if path == '/api/shiying-executor/status':
+    if path == '/api/frame-executor/status':
         config = _sx_gateway_config()
         _sx_registry()
         guard = _sx_guards_ready()
@@ -403,24 +403,24 @@ def _sx_operation(path, params):
                     query_mode=config.get('query_mode', 'remote'),
                     gateway_url=config.get('public_gateway_url', config['gateway_url']), source_guard=guard,
                     immediate_run=True)
-    if path == '/api/shiying-executor/subscribe':
+    if path == '/api/frame-executor/subscribe':
         return _sx_subscribe(params)
-    if path == '/api/shiying-executor/run-once':
+    if path == '/api/frame-executor/run-once':
         return _sx_run_once(params)
     with _sx_lock:
         return _sx_result(_sx_registry(), str(params.get('item_id') or ''))
 
 
-async def _shiying_executor(scope, receive, send):
+async def _frame_executor(scope, receive, send):
     import asyncio
     status = 200
     try:
-        token = _SX_Path('/config/shiying-executor.token').read_text().strip()
+        token = _SX_Path('/config/frame-executor.token').read_text().strip()
         supplied = dict(scope.get('headers', [])).get(b'authorization', b'').decode('ascii', 'ignore')
         path = scope['path']
         if len(token) < 32 or not _sx_hmac.compare_digest(supplied, 'Bearer ' + token):
             status, result = 401, dict(success=False)
-        elif path not in ('/api/shiying-executor/status', '/api/shiying-executor/subscribe', '/api/shiying-executor/subscription-status', '/api/shiying-executor/run-once'):
+        elif path not in ('/api/frame-executor/status', '/api/frame-executor/subscribe', '/api/frame-executor/subscription-status', '/api/frame-executor/run-once'):
             status, result = 404, dict(success=False)
         elif scope['method'] != ('GET' if path.endswith('/status') else 'POST'):
             status, result = 405, dict(success=False)

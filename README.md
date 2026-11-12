@@ -47,15 +47,15 @@ TMDB Logo 使用其官方开发者文档提供的 `https://files.readme.io/29c6f
 
 ## 首次部署
 
-镜像由 GitHub Actions 自动测试、构建并发布到 `ghcr.io/zikq-shmily/shiying`，支持 `linux/amd64` 与 `linux/arm64`。服务器只需 Docker Engine、Docker Compose 与 OpenSSL；本地电脑无需安装 Docker。
+镜像由 GitHub Actions 自动测试、构建并发布到 `ghcr.io/zikq-shmily/frame`，支持 `linux/amd64` 与 `linux/arm64`。服务器只需 Docker Engine、Docker Compose 与 OpenSSL；本地电脑无需安装 Docker。
 
 服务器在一个新目录下载部署文件：
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/shiying/main/compose.yaml
-curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/shiying/main/deploy.sh
-curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/shiying/main/backup.sh
-curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/shiying/main/update.sh
+curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/frame/main/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/frame/main/deploy.sh
+curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/frame/main/backup.sh
+curl -fsSLO https://raw.githubusercontent.com/ZikQ-Shmily/frame/main/update.sh
 ```
 
 执行首次部署：
@@ -85,7 +85,7 @@ sh update.sh
 
 Emby、TMDB、CMS/RE0、SMTP 的个人地址与凭据均在启动后从管理页填写，保存到挂载的数据库；API Key、SMTP 授权码等凭据加密保存。构建和发布流程不接收这些配置。`.env` 只在服务器生成，用于初始账号、会话/加密密钥、端口等运行参数；不会上传 GitHub 或打进镜像。
 
-更新时保留原 `.env`、`SECRET_KEY` 与 `data/`，无需重新填写连接。`sh update.sh` 会先拉取镜像、备份数据库，再替换容器。需要固定或回退版本时，在 `.env` 中设置 `SHIYING_IMAGE=ghcr.io/zikq-shmily/shiying:sha-完整提交SHA`，再执行更新；数据库结构发生变化时先核对兼容性，必要时连同备份恢复。
+更新时保留原 `.env`、`SECRET_KEY` 与 `data/`，无需重新填写连接。`sh update.sh` 会先拉取镜像、备份数据库，再替换容器。需要固定或回退版本时，在 `.env` 中设置 `FRAME_IMAGE=ghcr.io/zikq-shmily/frame:sha-完整提交SHA`，再执行更新；数据库结构发生变化时先核对兼容性，必要时连同备份恢复。
 
 生产配置不包含 `build`。需要自行从源码构建时显式使用：
 
@@ -147,11 +147,11 @@ node tests/check_connections_ui.cjs
 
 管理员通过 TMDB 添加作品后选择 RE0 条目，按发布者、版本筛选 115 来源。选择后自动保存来源信息，并向执行端下发作品、季数、条目、固定发布者。收费条目由管理员按显示的积分显式解锁；查询端执行前核对价格上限。网站定时检查和 CMS 订阅查源均不带购买授权，只使用免费或已解锁资源，不自动换条目或发布者。
 
-当前使用单 CMS 模式：网站配置 `re0_via_cms=true`，查询与订阅统一复用 `cms_url/cms_token`。`deploy/cms_bridge.py` 与 `deploy/cms_executor.py` 一起安装在用户自己的 CMS 插件中；查询端点 `/api/shiying` 使用已有 `/config/shiying-executor.token` 鉴权。OAuth 令牌留在该 CMS，由 CMS 管理刷新。网站与 CMS 均已移除对旧查询实例的活动配置。旧的 `re0_gateway_url/re0_gateway_token` 和独立桥接密钥仅为兼容分离模式。
+当前使用单 CMS 模式：网站配置 `re0_via_cms=true`，查询与订阅统一复用 `cms_url/cms_token`。`deploy/cms_bridge.py` 与 `deploy/cms_executor.py` 一起安装在用户自己的 CMS 插件中；查询端点 `/api/frame` 使用已有 `/config/frame-executor.token` 鉴权。OAuth 令牌留在该 CMS，由 CMS 管理刷新。网站与 CMS 均已移除对旧查询实例的活动配置。旧的 `re0_gateway_url/re0_gateway_token` 和独立桥接密钥仅为兼容分离模式。
 
-`deploy/install_executor.py` 负责校验语法、备份原文件并将两个适配模块安装到增强插件。单 CMS 模式下，权限为 600 的 `/config/shiying-executor.json` 仅保存 `query_mode="local"` 与 `public_gateway_url`（本机 CMS 的公开地址，须与网站 CMS 地址一致），不保存其他实例的地址或凭据。本机查源直接调用进程内 RE0 客户端，失败时不会回退到其他 CMS。RE0 账号在这台 CMS 内完成授权。
+`deploy/install_executor.py` 负责校验语法、备份原文件并将两个适配模块安装到增强插件。单 CMS 模式下，权限为 600 的 `/config/frame-executor.json` 仅保存 `query_mode="local"` 与 `public_gateway_url`（本机 CMS 的公开地址，须与网站 CMS 地址一致），不保存其他实例的地址或凭据。本机查源直接调用进程内 RE0 客户端，失败时不会回退到其他 CMS。RE0 账号在这台 CMS 内完成授权。
 
-执行端在 CMS 原生媒体订阅中创建记录，先保存并读回 `hdhive_author` 与发布者规则，再激活订阅。逐季固定条目保存在 CMS 配置 `cms_shiying_subscriptions_v1` 中；同一作品的多个季可用不同发布者，CMS 查源只解析登记的条目。拾影管理的订阅会屏蔽其他虚拟来源和原生 Telegram 来源，网关故障时不回退到其他发布者。若 CMS 已存在独立维护的同一作品订阅，拒绝覆盖并在网站提示下发失败。
+执行端在 CMS 原生媒体订阅中创建记录，先保存并读回 `hdhive_author` 与发布者规则，再激活订阅。逐季固定条目保存在 CMS 配置 `cms_frame_subscriptions_v1` 中；同一作品的多个季可用不同发布者，CMS 查源只解析登记的条目。拾影管理的订阅会屏蔽其他虚拟来源和原生 Telegram 来源，网关故障时不回退到其他发布者。若 CMS 已存在独立维护的同一作品订阅，拒绝覆盖并在网站提示下发失败。
 
 暂停作品、解绑来源、移到回收站会下发该季暂停；同作品仍有其他活动季时，CMS 的整部作品订阅继续运行。失败保留来源并进入待处理，详情可重试下发，后台同步也会重试。恢复记录会恢复下发。网站显示“已下发”只表示 CMS 已接收规则，实际下载与入库结果以 CMS 和 Emby 为准。备份包含 RE0 绑定但不导出密钥；恢复后的下发状态重新确认。CMS 插件升级时应保留适配模块，覆盖前备份。
 

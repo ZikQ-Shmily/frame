@@ -17,7 +17,7 @@ import integrations
 class RoleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix='shiying-roles-')
+        cls.temp = tempfile.TemporaryDirectory(prefix='frame-roles-')
         # Start with the old schema, so every test also exercises the migration.
         with sqlite3.connect(Path(cls.temp.name) / 'media.sqlite3') as db:
             db.execute('CREATE TABLE sessions (id TEXT PRIMARY KEY, expires REAL NOT NULL)')

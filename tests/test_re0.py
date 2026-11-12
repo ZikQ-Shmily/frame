@@ -219,59 +219,59 @@ class BridgeTests(unittest.TestCase):
     def test_paid_unknown_or_changed_author_never_unlock(self):
         for change in [dict(unlock_points=2),dict(unlock_points=None),dict(user=dict(nickname='乙'))]:
             self.raw.update(change)
-            with self.assertRaises(ValueError):self.ns['_shiying_operation']('/api/shiying/resolve',self.params)
+            with self.assertRaises(ValueError):self.ns['_frame_operation']('/api/frame/resolve',self.params)
         self.client.unlock.assert_not_called()
 
     def test_free_and_unlocked_resolve(self):
-        result=self.ns['_shiying_operation']('/api/shiying/resolve',self.params)
+        result=self.ns['_frame_operation']('/api/frame/resolve',self.params)
         self.assertEqual(result['data']['share_url'],'https://115.com/s/abc')
         self.client.search.assert_called_with('tv','123')
         self.raw.update(unlock_points=10,is_unlocked=True)
-        self.assertTrue(self.ns['_shiying_operation']('/api/shiying/resolve',self.params)['success'])
+        self.assertTrue(self.ns['_frame_operation']('/api/frame/resolve',self.params)['success'])
 
     def test_uploader_whitespace_is_normalized_for_search_and_resolve(self):
         self.raw['user']['nickname'] = '　甲 '
-        search = self.ns['_shiying_operation']('/api/shiying/search', self.params)
+        search = self.ns['_frame_operation']('/api/frame/search', self.params)
         self.assertEqual(search['data'][0]['uploader'], '甲')
-        resolved = self.ns['_shiying_operation']('/api/shiying/resolve', self.params)
+        resolved = self.ns['_frame_operation']('/api/frame/resolve', self.params)
         self.assertEqual(resolved['data']['uploader'], '甲')
         self.raw['user']['nickname'] = '　乙 '
         self.client.unlock.reset_mock()
         with self.assertRaises(ValueError):
-            self.ns['_shiying_operation']('/api/shiying/resolve', self.params)
+            self.ns['_frame_operation']('/api/frame/resolve', self.params)
         self.client.unlock.assert_not_called()
 
     def test_explicit_paid_unlock_and_price_changes(self):
         self.raw.update(unlock_points=10)
         for limit in [None, 9, True, '10', float('inf')]:
             with self.assertRaises(ValueError):
-                self.ns['_shiying_operation']('/api/shiying/resolve',dict(self.params,max_points=limit))
+                self.ns['_frame_operation']('/api/frame/resolve',dict(self.params,max_points=limit))
         self.client.unlock.assert_not_called()
-        result=self.ns['_shiying_operation']('/api/shiying/resolve',dict(self.params,max_points=10))
+        result=self.ns['_frame_operation']('/api/frame/resolve',dict(self.params,max_points=10))
         self.assertTrue(result['data']['is_unlocked'])
         self.client.unlock.assert_called_once_with('slug')
         self.raw.update(is_unlocked=True)
         # Background check can read an already unlocked paid item without purchase authority.
-        result=self.ns['_shiying_operation']('/api/shiying/resolve',self.params)
+        result=self.ns['_frame_operation']('/api/frame/resolve',self.params)
         self.assertTrue(result['success'])
         self.raw.update(is_unlocked=False,unlock_points=None)
         with self.assertRaises(ValueError):
-            self.ns['_shiying_operation']('/api/shiying/resolve',dict(self.params,max_points=10))
+            self.ns['_frame_operation']('/api/frame/resolve',dict(self.params,max_points=10))
 
     def test_unknown_price_only_manual_permission_can_unlock(self):
         self.raw['unlock_points'] = None
         for option in ({}, {'allow_unknown_price': False}, {'allow_unknown_price': 'true'}):
             with self.subTest(option=option), self.assertRaises(ValueError):
-                self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, **option))
+                self.ns['_frame_operation']('/api/frame/resolve', dict(self.params, **option))
         self.client.unlock.assert_not_called()
-        result = self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, allow_unknown_price=True))
+        result = self.ns['_frame_operation']('/api/frame/resolve', dict(self.params, allow_unknown_price=True))
         self.assertIsNone(result['data']['unlock_points'])
         self.client.unlock.assert_called_once_with('slug')
         # A formerly unknown price that has become paid still requires the normal limit.
         self.client.unlock.reset_mock()
         self.raw['unlock_points'] = 10
         with self.assertRaises(ValueError):
-            self.ns['_shiying_operation']('/api/shiying/resolve', dict(self.params, allow_unknown_price=True))
+            self.ns['_frame_operation']('/api/frame/resolve', dict(self.params, allow_unknown_price=True))
         self.client.unlock.assert_not_called()
 
     def test_auth_and_method_reject_before_external_access(self):
@@ -280,6 +280,6 @@ class BridgeTests(unittest.TestCase):
             async def send(message):messages.append(message)
             async def receive():return dict(type='http.request',body=b'{}')
             with patch('pathlib.Path.read_text',return_value='a'*64):
-                asyncio.run(self.ns['_shiying_bridge'](dict(path='/api/shiying/search',method=method,headers=[(b'authorization',header)]),receive,send))
+                asyncio.run(self.ns['_frame_bridge'](dict(path='/api/frame/search',method=method,headers=[(b'authorization',header)]),receive,send))
             self.assertEqual(messages[0]['status'],status)
         self.client.search.assert_not_called()

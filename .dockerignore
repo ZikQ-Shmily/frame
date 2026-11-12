@@ -7,6 +7,7 @@
 !cms_client.py
 !share_scanner.py
 !email_notifications.py
+!frame_migration.py
 !static/
 !static/*.html
 !static/*.css

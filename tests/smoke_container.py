@@ -28,8 +28,8 @@ def main(image):
            "assert not (root/'.git').exists(); assert not (root/'tests').exists(); "
            "assert not any(p.name.startswith('.env') or p.suffix in ('.sqlite3','.db','.pem','.key') for p in root.rglob('*') if p.is_file())")
     print('Image contains application code and public assets, with no runtime configuration or database.')
-    name = 'shiying-ci-' + secrets.token_hex(5)
-    with tempfile.TemporaryDirectory(prefix='shiying-container-test-') as folder:
+    name = 'frame-ci-' + secrets.token_hex(5)
+    with tempfile.TemporaryDirectory(prefix='frame-container-test-') as folder:
         data = Path(folder) / 'data'; data.mkdir(); data.chmod(0o777)
         password = secrets.token_urlsafe(24)
         key = secrets.token_hex(32)
