@@ -272,6 +272,21 @@ class SMTPTests(unittest.TestCase):
         movie=copy.deepcopy(self.payload);movie['kind']='movie'
         self.assertNotIn('第 2 季',mail.build_message(self.config,movie,'owner@example.com','id2')['Subject'])
 
+    def test_notification_and_test_mail_render_without_optional_links(self):
+        self.config['site_url'] = ''
+        payload = dict(self.payload, title='<script>alert(1)</script>', tmdb={})
+        message = mail.build_message(self.config, payload, 'owner@example.com', 'id')
+        markup = message.get_body(preferencelist=('html',)).get_content()
+        plain = message.get_body(preferencelist=('plain',)).get_content()
+        self.assertIn('&lt;script&gt;', markup)
+        self.assertNotIn('<script>', markup)
+        self.assertNotIn('打开拾影', markup)
+        self.assertIn('提交用户：<Alice>', plain)
+        test = mail.build_message(self.config, {'test': True}, 'owner@example.com', 'id2')
+        html_test = test.get_body(preferencelist=('html',)).get_content()
+        self.assertIn('邮件通知测试成功', html_test)
+        self.assertNotIn('提交用户', html_test)
+
     def test_auth_errors_are_sanitized(self):
         with patch.object(mail.smtplib,'SMTP_SSL') as smtp:
             smtp.return_value.login.side_effect=smtplib.SMTPAuthenticationError(535,b'private-smtp-code')
