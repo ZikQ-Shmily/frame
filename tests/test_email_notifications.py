@@ -16,7 +16,7 @@ import email_notifications as mail
 class EmailNotificationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix='shiying-mail-tests-')
+        cls.temp = tempfile.TemporaryDirectory(prefix='frame-mail-tests-')
         with patch.dict(os.environ, dict(DATA_DIR=cls.temp.name, SECRET_KEY=secrets.token_hex(32),
                 ADMIN_USERNAME='test-admin', ADMIN_PASSWORD='Test-Mail-Password-2026', ENABLE_SCHEDULER='false')):
             spec = importlib.util.spec_from_file_location('email_test_app', Path(__file__).parents[1] / 'app.py')

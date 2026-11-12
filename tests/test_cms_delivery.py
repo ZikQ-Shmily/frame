@@ -276,10 +276,10 @@ class ExecutorAddonTests(unittest.TestCase):
     def test_local_query_uses_native_oauth_without_http_or_remote_fallback(self):
         self.ns['_sx_gateway_config'] = lambda: dict(query_mode='local', public_gateway_url='http://own:9527')
         native = Mock(return_value=dict(success=True, data=[]))
-        self.ns['_shiying_operation'] = native
+        self.ns['_frame_operation'] = native
         with patch('urllib.request.build_opener') as opener:
             self.local_gateway('search', {'tmdb_id':123,'media_type':'tv'})
-            native.assert_called_once_with('/api/shiying/search', {'tmdb_id':123,'media_type':'tv'})
+            native.assert_called_once_with('/api/frame/search', {'tmdb_id':123,'media_type':'tv'})
             opener.assert_not_called()
             native.side_effect = RuntimeError('own authorization unavailable')
             with self.assertRaises(RuntimeError):
@@ -288,13 +288,13 @@ class ExecutorAddonTests(unittest.TestCase):
 
     def test_local_mode_still_preserves_exact_source_rules_and_native_subscription(self):
         self.ns['_sx_gateway_config'] = lambda: dict(query_mode='local', gateway_url='http://own:9527')
-        self.ns['_shiying_operation'] = Mock(return_value=dict(success=True, data=dict(slug='fixed',uploader='甲')))
+        self.ns['_frame_operation'] = Mock(return_value=dict(success=True, data=dict(slug='fixed',uploader='甲')))
         self.ns['_sx_gateway'] = self.local_gateway
         result = self.submit(expected_gateway_url='http://own:9527')
         self.assertEqual(result['data']['subscription_id'], '81')
         self.assertEqual(self.filters['authors'], ['甲'])
         self.assertEqual(self.rows[0]['status'], 1)
-        self.assertNotIn('max_points', self.ns['_shiying_operation'].call_args.args[1])
+        self.assertNotIn('max_points', self.ns['_frame_operation'].call_args.args[1])
 
     def test_rules_precede_activation_and_duplicate_submit_is_one_record(self):
         result=self.submit()

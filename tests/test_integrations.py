@@ -16,7 +16,7 @@ import integrations as clients
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix='shiying-integrations-')
+        cls.temp = tempfile.TemporaryDirectory(prefix='frame-integrations-')
         overrides = dict(DATA_DIR=cls.temp.name, SECRET_KEY=secrets.token_hex(32),
                          ADMIN_USERNAME='tester', ADMIN_PASSWORD='Temporary-Test-12345', ENABLE_SCHEDULER='false')
         with patch.dict(os.environ, overrides):
