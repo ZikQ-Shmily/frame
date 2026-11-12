@@ -33,7 +33,7 @@ function emailNotificationSettingsSection() {
         <label class="span-all">SMTP 用户名<input name="smtp_username" type="text" maxlength="254" autocomplete="off" placeholder="通常与发件邮箱相同" value="${esc(config.smtp_username || '')}"></label>
         <label class="span-all">SMTP 密码 / 授权码<input name="smtp_password" type="password" maxlength="4096" autocomplete="new-password" value="" placeholder="${config.has_password ? '已配置 · 留空保留已有授权码' : '填写邮箱的 SMTP 授权码或应用密码'}"><small>按邮箱服务商要求开启 SMTP；授权码在服务器加密保存，不会返回网页。更换服务器或用户名后需重新填写。</small></label>
         ${config.has_password ? '<label class="checkbox-label span-all"><input name="clear_password" type="checkbox">清除已保存的授权码</label>' : ''}
-        <label class="span-all">邮件中的网站地址（可选）<input name="site_url" type="url" maxlength="2000" placeholder="https://shiying.example.com" value="${esc(config.site_url || window.location?.origin || '')}"><small>填写后，邮件会附上打开拾影的入口。</small></label>
+        <label class="span-all">邮件中的网站地址（可选）<input name="site_url" type="url" maxlength="2000" placeholder="https://frame.example.com" value="${esc(config.site_url || window.location?.origin || '')}"><small>填写后，邮件会附上打开拾影的入口。</small></label>
         <label class="checkbox-label span-all"><input name="enabled" type="checkbox"${config.enabled ? ' checked' : ''}>开启新追更邮件提醒</label>
       </div>
       <p id="email-settings-error" class="form-error" role="alert"></p>
