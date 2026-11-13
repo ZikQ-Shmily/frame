@@ -94,7 +94,7 @@ assert.equal(run('requestStatus(state.items[1])[0]'),'今日开播');
 assert.equal(run('requestStatus(state.items[0])[0]'),'等待入库');
 assert.equal(run('premiereLabel({kind:"movie"})'),'今日上映');
 let choices=run('seasonChoices([{season_number:1,name:"第一季",episode_count:40,air_date:"2026-10-23"}])');
-assert(!choices.includes('<select')&&choices.includes('type="radio"')&&choices.includes('name="season"')&&choices.includes(' checked'));
+assert(!choices.includes('<select')&&choices.includes('type="checkbox"')&&choices.includes('name="season"')&&choices.includes(' checked'));
 assert(choices.includes('40 集')&&choices.includes('2026-10-23 首播')&&choices.includes('已选中'));
 choices=run('seasonChoices([{season_number:1},{season_number:2,name:"<img src=x>"}])');
 assert.equal((choices.match(/ checked/g)||[]).length,1);
