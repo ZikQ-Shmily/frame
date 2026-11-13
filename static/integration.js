@@ -120,7 +120,7 @@ function renderTmdbResults() {
 }
 function seasonChoices(seasons) {
   const options = seasons.length ? seasons : [{season_number:1,name:'第 1 季',episode_count:0}];
-  return `<fieldset class="season-picker"><legend>${options.length === 1 ? '追踪这一季' : '选择追踪的季'}</legend><div class="season-choices">${options.map((season,index) => `<label class="season-choice"><input type="radio" name="season" value="${esc(season.season_number)}" required${index === 0 ? ' checked' : ''}><span class="season-choice-surface"><span class="season-choice-top"><strong>${esc(season.name || `第 ${season.season_number} 季`)}</strong><span class="season-choice-check">${icon('check')}</span></span><span class="season-choice-meta">${season.episode_count ? `${esc(season.episode_count)} 集` : '集数待更新'}<span>·</span>${season.air_date ? `${esc(season.air_date)} 首播` : '首播日期待定'}</span></span></label>`).join('')}</div><p class="season-choice-hint">${options.length === 1 ? '已选中，可直接确认追更。' : '每季独立追踪，选择后确认加入追更。'}</p></fieldset>`;
+  return `<fieldset class="season-picker"><legend>${options.length === 1 ? '追踪这一季' : '选择追踪的季'}</legend><div class="season-choices">${options.map((season,index) => `<label class="season-choice"><input type="checkbox" name="season" value="${esc(season.season_number)}"${index === 0 ? ' checked' : ''}><span class="season-choice-surface"><span class="season-choice-top"><strong>${esc(season.name || `第 ${season.season_number} 季`)}</strong><span class="season-choice-check">${icon('check')}</span></span><span class="season-choice-meta">${season.episode_count ? `${esc(season.episode_count)} 集` : '集数待更新'}<span>·</span>${season.air_date ? `${esc(season.air_date)} 首播` : '首播日期待定'}</span></span></label>`).join('')}</div><p class="season-choice-hint">${options.length === 1 ? '已选中，可直接确认追更。' : '可多选，每季分别记录来源和入库进度。'}</p></fieldset>`;
 }
 async function confirmTmdbTitle(mediaType, id, button) {
   button.disabled = true;
@@ -132,15 +132,44 @@ async function confirmTmdbTitle(mediaType, id, button) {
   finally { button.disabled = false; }
 }
 async function trackTmdb(event) {
-  event.preventDefault(); const detail = connection.selected; if (!detail) return; const form = event.target; const data = new FormData(form); const button = $('button[type="submit"]', form); button.disabled = true; $('#tmdb-track-error').textContent = '';
+  event.preventDefault();
+  const detail = connection.selected; if (!detail) return;
+  const form = event.target, data = new FormData(form), button = $('button[type="submit"]', form);
+  const errorNode = $('#tmdb-track-error', form);
+  const seasons = detail.media_type === 'movie' ? [1] : [...new Set(data.getAll('season').map(Number))];
+  if (!seasons.length) { errorNode.textContent = '请至少选择一季。'; return; }
+  const picker = $('.season-picker', form);
+  button.disabled = true; if (picker) picker.disabled = true;
+  errorNode.textContent = '';
+  const results = [], failures = [];
   try {
-    const result = await api('/api/tmdb/track', { method: 'POST', body: { tmdb_id: detail.tmdb_id, media_type: detail.media_type, season: Number(data.get('season') || 1) } });
-    await loadItems(); renderPage(); if (result.item?.id) openDetail(result.item.id); else $('#modal').close();
-    toast(result.added_request ? (isAdministrator() ? '已加入追更，提交用户已记录。' : '已提交追更，可以在我的追更中查看进度。') : '你已经追更了这部作品，已打开现有记录。');
-    if (isAdministrator() && result.item?.id && connection.config?.emby_configured && !result.already_exists) await startSync(result.item.id, false);
-    else scheduleIntegrationPoll();
-  } catch (error) { const node = $('#tmdb-track-error'); if (node) node.textContent = error.message; else toast(error.message, true); }
-  finally { button.disabled = false; }
+    for (const season of seasons) {
+      try {
+        const result = await api('/api/tmdb/track', { method:'POST', body:{ tmdb_id:detail.tmdb_id, media_type:detail.media_type, season } });
+        results.push({season, result});
+      } catch (error) { failures.push({season, message:error.message || '提交失败，请重试'}); }
+    }
+    if (results.length) {
+      // The server queues the Emby comparison for each season after saving it.
+      try { await loadItems(); renderPage(); } catch (_) { scheduleIntegrationPoll(); }
+      scheduleIntegrationPoll();
+    }
+    if (failures.length) {
+      const completed = new Set(results.map(entry => String(entry.season)));
+      form.querySelectorAll('input[name="season"][type="checkbox"]').forEach(input => { if (completed.has(input.value)) input.checked = false; });
+      errorNode.textContent = `${results.length ? `已处理 ${results.length} 季；` : ''}${failures.map(entry => `第 ${entry.season} 季：${entry.message}`).join('；')}。请重试选中的季。`;
+      return;
+    }
+    if (seasons.length === 1) {
+      const result = results[0].result;
+      if (result.item?.id) openDetail(result.item.id); else $('#modal').close();
+      toast(result.added_request ? (isAdministrator() ? '已加入追更，提交用户已记录。' : '已提交追更，可以在我的追更中查看进度。') : '你已经追更了这部作品，已打开现有记录。');
+    } else {
+      const added = results.filter(entry => entry.result.added_request).length;
+      $('#modal').close();
+      toast(`${added ? `已加入 ${added} 季追更` : '所选季均已追更'}${added < results.length && added ? `，${results.length - added} 季此前已追更` : ''}。`);
+    }
+  } finally { button.disabled = false; if (picker) picker.disabled = false; }
 }
 
 function integrationSettingsSection() {
