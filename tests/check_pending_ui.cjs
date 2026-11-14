@@ -128,3 +128,15 @@ assert(run("statusBadge(state.items[1])").includes("追更中，已补集"));
 run("state.items[1].emby.state=\"unmatched\"");
 assert(!run("statusBadge(state.items[1])").includes("已补集"));
 console.log("Verified unbound titles use waiting-for-source filters/guidance, and caught-up status requires verified library progress.");
+
+// A failed connection uses a previously successful comparison, not an invented zero.
+const stale = base('stale',{tmdb:{id:42},emby:{state:'error',last_success_state:'matched',error:'连接超时'},library_episodes:'1-4',library_count:4,status:'complete',request_active:true});
+run('state.items='+JSON.stringify([stale])+';state.role="admin"');
+assert.equal(run('hasVerifiedLibrary(state.items[0])'),true);
+assert.match(run('integratedTableRow(state.items[0])'),/Emby 4/);
+assert.match(run('integratedTableRow(state.items[0])'),/上次记录/);
+assert.match(run('embyComparison(state.items[0])'),/同步失败 · 显示上次结果/);
+assert.equal(run('userRequestBucket(state.items[0])'),'complete');
+run('state.items[0].emby={state:"error"}') ;
+assert.equal(run('hasVerifiedLibrary(state.items[0])'),false);
+console.log('Verified last known Emby progress and never-synced failure remain distinct.');

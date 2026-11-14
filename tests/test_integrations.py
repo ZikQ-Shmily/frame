@@ -396,6 +396,20 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(item['library_episodes'], '1-3')
         self.assertEqual(item['emby']['state'], 'unmatched')
 
+    def test_last_success_is_retained_across_emby_outages(self):
+        self.record(library_episodes='1-3')
+        ok = self.perform_sync(comparison=dict(state='matched', episodes=[1, 2, 3], item_ids=['series'], error='', unnumbered=0))
+        self.assertEqual(ok['emby']['last_success_state'], 'matched')
+        self.assertTrue(ok['emby']['last_success_at'])
+        failed = self.perform_sync(error=clients.IntegrationError('模拟连接失败'))
+        self.assertEqual(failed['library_episodes'], '1-3')
+        self.assertEqual(failed['emby']['state'], 'error')
+        self.assertEqual(failed['emby']['last_success_state'], 'matched')
+        self.assertEqual(failed['emby']['last_success_at'], ok['emby']['last_success_at'])
+        failed_again = self.perform_sync(error=clients.IntegrationError('仍未连接'))
+        self.assertEqual(failed_again['emby']['last_success_state'], 'matched')
+        self.assertEqual(failed_again['library_episodes'], '1-3')
+
     def test_absent_result_preserves_conflicting_historical_progress(self):
         self.record(library_episodes='1-3')
         item = self.perform_sync(comparison=dict(state='absent', episodes=[], item_ids=[], error='', unnumbered=0))
