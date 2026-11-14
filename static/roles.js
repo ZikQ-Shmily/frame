@@ -47,7 +47,7 @@ async function refreshUserPortal() {
 }
 function userRequestBucket(item) {
   if (!item.request_active) return 'cancelled';
-  return item.emby?.state === 'matched' && item.status === 'complete' ? 'complete' : 'ongoing';
+  return (item.emby?.state === 'matched' || (item.emby?.state === 'error' && item.emby?.last_success_state === 'matched')) && item.status === 'complete' ? 'complete' : 'ongoing';
 }
 function userCollections(items = state.items) {
   const records = [...items].sort((a, b) => (Date.parse(b.requested_at) || 0) - (Date.parse(a.requested_at) || 0));
@@ -61,7 +61,7 @@ function userCollections(items = state.items) {
 function requestStatus(item) {
   const bucket = userRequestBucket(item);
   if (bucket === 'cancelled') return ['已取消', 'unverified'];
-  if (bucket === 'complete') return ['已收齐', 'complete'];
+  if (bucket === 'complete') return [item.emby?.state === 'error' ? '已收齐 · 上次记录' : '已收齐', 'complete'];
   if (item.tracking === false) return ['更新检查已暂停', 'unverified'];
   if (item.status === 'premiering') return [premiereLabel(item), 'premiering'];
   if (item.status === 'wanted') return ['待找资源', 'wanted'];
@@ -128,7 +128,7 @@ function renderUserHistory(collections) {
 function userHistoryRow(item) {
   const [label,status] = requestStatus(item), verified = hasVerifiedLibrary(item);
   const unit = item.kind === 'movie' ? '部' : '集';
-  const progress = verified ? `${item.library_count || 0} ${unit}` : '待核对';
+  const progress = verified ? `${item.library_count || 0} ${unit}${item.emby?.state === 'error' ? '（上次记录）' : ''}` : '待核对';
   return `<tr><td><div class="user-history-title">${poster(item.tmdb?.poster_path, '')}<div><strong>${esc(titleOf(item))}</strong><small>${esc(kindLabels[item.kind] || '')} · ${esc(item.year || '年份待定')}</small></div></div></td><td><time datetime="${esc(item.requested_at)}">${esc(requestDate(item.requested_at))}</time>${!item.request_active && item.withdrawn_at ? `<small>取消于 ${esc(requestDate(item.withdrawn_at))}</small>` : ''}</td><td><strong class="user-history-progress">${esc(progress)}</strong><small>已播 ${item.aired_count || 0} ${unit}</small>${item.airing_today_count ? `<small>${esc(todayScheduleSummary(item))}</small>` : ''}</td><td><span class="status status-${status}">${label}</span></td><td><button class="text-link" data-user-action="detail" data-id="${esc(item.id)}">查看 ${icon('arrow')}</button></td></tr>`;
 }
 function userCard(item) {
