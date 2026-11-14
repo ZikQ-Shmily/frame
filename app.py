@@ -490,7 +490,7 @@ def item_for_user(item):
     result = {key: full[key] for key in allowed}
     metadata = full.get('tmdb')
     result['tmdb'] = {key: metadata.get(key) for key in ('id', 'media_type', 'poster_path', 'overview', 'synced_at')} if metadata else None
-    result['emby'] = {key: full.get('emby', {}).get(key) for key in ('state', 'checked_at')}
+    result['emby'] = {key: full.get('emby', {}).get(key) for key in ('state', 'checked_at', 'last_success_state', 'last_success_at')}
     result['request_active'] = requester['active']
     result['requested_at'] = requester['submitted_at']
     result['withdrawn_at'] = requester.get('withdrawn_at', '')
@@ -531,6 +531,8 @@ def decorate(item):
                        for source in item['sources']]
     item.setdefault('tmdb', None)
     item.setdefault('emby', {'state': 'never'})
+    if item['emby'].get('state') == 'error' and not item['emby'].get('last_success_state') and item['emby'].get('item_ids'):
+        item['emby'] = dict(item['emby'], last_success_state='matched')
     item.setdefault('tracking', True)
     item.setdefault('events', [])
     item.setdefault('requesters', [])
@@ -1751,6 +1753,8 @@ def run_sync(item_id=None):
                     values = set(comparison.pop('episodes'))
                     comparison['episodes'] = format_episodes(values)
                     current['emby'] = dict(comparison, checked_at=now())
+                    if comparison['state'] in ('matched', 'absent'):
+                        current['emby'].update(last_success_state=comparison['state'], last_success_at=current['emby']['checked_at'])
                     if comparison['state'] == 'matched':
                         before = current['library_episodes']
                         current['library_episodes'] = comparison['episodes']
@@ -1762,7 +1766,10 @@ def run_sync(item_id=None):
                     elif previous.get('state') != 'unmatched':
                         event(current, 'emby_unmatched', '暂未匹配到 EMBY，保留原入库进度等待核对')
                 else:
-                    current['emby'] = dict(previous, state='error', checked_at=now(), error=comparison_error)
+                    last_state = previous.get('last_success_state') or (previous.get('state') if previous.get('state') in ('matched', 'absent') else '')
+                    if not last_state and previous.get('state') == 'error' and previous.get('item_ids'):
+                        last_state = 'matched'  # Older failed records retained matched Emby IDs.
+                    current['emby'] = dict(previous, state='error', checked_at=now(), error=comparison_error, last_success_state=last_state, last_success_at=previous.get('last_success_at') or (previous.get('checked_at', '') if previous.get('state') in ('matched', 'absent') else ''))
                     if previous.get('state') != 'error':
                         event(current, 'sync_error', 'Emby 入库比对失败，已保留上次进度。' + comparison_error)
                 if metadata and comparison and comparison['state'] == 'matched':
